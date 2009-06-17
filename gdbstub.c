@@ -97,7 +97,7 @@ static int get_char(GDBState *s)
         if (ret < 0) {
             if (errno == ECONNRESET)
                 s->fd = -1;
-            if (errno != EINTR && errno != EAGAIN)
+            if (errno != EAGAIN && errno != EWOULDBLOCK)
                 return -1;
         } else if (ret == 0) {
             socket_close(s->fd);
@@ -150,7 +150,7 @@ static void put_buffer(GDBState *s, const uint8_t *buf, int len)
     while (len > 0) {
         ret = socket_send(s->fd, buf, len);
         if (ret < 0) {
-            if (errno != EINTR && errno != EAGAIN)
+            if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
                 return;
         } else {
             buf += ret;
@@ -1435,7 +1435,7 @@ gdb_handlesig (CPUState *env, int sig)
           for (i = 0; i < n; i++)
             gdb_read_byte (s, buf[i]);
         }
-      else if (n == 0 || errno != EAGAIN)
+      else if (n == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
         {
           /* XXX: Connection closed.  Should probably wait for annother
              connection before continuing.  */

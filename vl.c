@@ -2238,7 +2238,7 @@ static int send_all(int fd, const uint8_t *buf, int len1)
     while (len > 0) {
         ret = socket_send(fd, buf, len);
         if (ret < 0) {
-            if (errno != EWOULDBLOCK) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
                 return -1;
             }
         } else if (ret == 0) {
@@ -2261,7 +2261,7 @@ static int unix_write(int fd, const uint8_t *buf, int len1)
     while (len > 0) {
         ret = write(fd, buf, len);
         if (ret < 0) {
-            if (errno != EINTR && errno != EAGAIN)
+            if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
                 return -1;
         } else if (ret == 0) {
             break;
@@ -3828,7 +3828,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
             ret = socket_connect(fd, &saddr);
             if (ret < 0) {
                 err = errno;
-                if (err == EINTR || err == EWOULDBLOCK) {
+                if (err == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 } else if (err == EINPROGRESS) {
                     break;
 #ifdef _WIN32
@@ -4566,7 +4566,8 @@ static void tap_receive(void *opaque, const uint8_t *buf, int size)
     int ret;
     for(;;) {
         ret = write(s->fd, buf, size);
-        if (ret < 0 && (errno == EINTR || errno == EAGAIN)) {
+        if (ret < 0 &&
+            (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
         } else {
             break;
         }
@@ -4965,7 +4966,7 @@ static void net_socket_send(void *opaque)
     size = socket_recv(s->fd, buf1, sizeof(buf1));
     if (size < 0) {
         err = errno;
-        if (err != EWOULDBLOCK)
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
             goto eoc;
     } else if (size == 0) {
         /* end of connection */
@@ -5271,7 +5272,7 @@ static int net_socket_connect_init(VLANState *vlan, const char *host_str)
         ret = socket_connect(fd, &saddr);
         if (ret < 0) {
             err = errno;
-            if (err == EINTR || err == EWOULDBLOCK) {
+            if (err == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
             } else if (err == EINPROGRESS) {
                 break;
 #ifdef _WIN32

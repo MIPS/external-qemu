@@ -230,7 +230,7 @@ static void  control_control_write( ControlClient  client, const char*  buff, in
         ret = socket_send( client->sock, buff, len);
 #endif
         if (ret < 0) {
-            if (errno != EINTR && errno != EWOULDBLOCK)
+            if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
                 return;
         } else {
             buff += ret;
@@ -495,8 +495,8 @@ control_client_read( void*  _client )
 #endif
     if (size < 0) {
         D(( "size < 0, exiting with %d: %s\n", errno, errno_str ));
-		if (errno != EWOULDBLOCK && errno != EINTR)
-			control_client_destroy( client );
+        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+            control_client_destroy( client );
         return;
     }
 

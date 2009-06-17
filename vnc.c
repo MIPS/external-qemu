@@ -688,7 +688,7 @@ static int vnc_client_io_error(VncState *vs, int ret, int last_errno)
             switch (last_errno) {
                 case EINTR:
                 case EAGAIN:
-#ifdef _WIN32
+#if EWOULDBLOCK != EAGAIN
                 case EWOULDBLOCK:
 #endif
                     return 0;

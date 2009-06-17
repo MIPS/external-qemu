@@ -65,7 +65,7 @@ connection_init( Connection*  conn )
         PROXY_LOG("%s: immediate connection", root->name);
     }
     else {
-        if (errno == EINPROGRESS || errno == EWOULDBLOCK) {
+        if (errno == EINPROGRESS || errno == EAGAIN || errno == EWOULDBLOCK) {
             conn->state = STATE_CONNECTING;
             PROXY_LOG("%s: connecting", root->name);
         }

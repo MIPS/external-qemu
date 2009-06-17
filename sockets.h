@@ -36,7 +36,10 @@
 #    define EINTR        10004
 #  endif
 #  ifndef EWOULDBLOCK
-#    define EWOULDBLOCK  10035
+#    ifndef EAGAIN
+#      define EAGAIN      10035
+#    endif
+#    define EWOULDBLOCK  EAGAIN
 #  endif
 #  ifndef EINPROGRESS
 #    define EINPROGRESS  10036
