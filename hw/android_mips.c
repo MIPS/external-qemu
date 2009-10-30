@@ -67,7 +67,8 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
     int i;
 
     if (!cpu_model)
-        cpu_model = "mips32";
+        //cpu_model = "mips32";
+        cpu_model = "4KEc";
 
     env = cpu_init(cpu_model);
 
