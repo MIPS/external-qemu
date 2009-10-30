@@ -28,6 +28,7 @@ OPTION_NO_PREBUILTS=no
 OPTION_TRY_64=no
 OPTION_HELP=no
 OPTION_DEBUG=no
+OPTION_TARGET_ARCH=mips
 
 if [ -z "$CC" ] ; then
   CC=gcc
@@ -62,6 +63,8 @@ for opt do
   --no-prebuilts) OPTION_NO_PREBUILTS=yes
   ;;
   --try-64) OPTION_TRY_64=yes
+  ;;
+  --target-arch=*) OPTION_TARGET_ARCH=$optarg
   ;;
   *)
     echo "unknown option '$opt', use --help"
@@ -365,7 +368,8 @@ feature_check_header HAVE_BYTESWAP_H "<byteswap.h>"
 create_config_mk
 
 PWD=`pwd`
-echo "TARGET_ARCH := arm" >> $config_mk
+#echo "TARGET_ARCH := arm" >> $config_mk
+echo "TARGET_ARCH := $OPTION_TARGET_ARCH" >> $config_mk
 echo "SRC_PATH          := $PWD" >> $config_mk
 echo "SDL_CONFIG         := $SDL_CONFIG" >> $config_mk
 echo "CONFIG_COREAUDIO  := $PROBE_COREAUDIO" >> $config_mk
