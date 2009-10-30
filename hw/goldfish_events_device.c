@@ -384,7 +384,7 @@ void events_dev_init(uint32_t base, qemu_irq irq)
     cpu_register_physical_memory(base, 0xfff, iomemtype);
 
     qemu_add_kbd_event_handler(events_put_keycode, s);
-    qemu_add_mouse_event_handler(events_put_mouse, s, 1);
+    qemu_add_mouse_event_handler(events_put_mouse, s, 1, "default mouse");
     qemu_add_generic_event_handler(events_put_generic, s);
 
     s->base = base;
