@@ -2193,7 +2193,11 @@ static void gen_muldiv (DisasContext *ctx, uint32_t opc,
             tcg_gen_shli_i64(r_tmp3, r_tmp3, 32);
             tcg_gen_or_i64(r_tmp2, r_tmp2, r_tmp3);
             tcg_temp_free(r_tmp3);
-            tcg_gen_sub_i64(r_tmp1, r_tmp1, r_tmp2);
+            /* msub means HI/LO = HI/LO - GPR[RS]*GPR[RT],
+             * not HI/LO = GPR[RS]*GPR[RT] - HI/LO
+             */
+            //tcg_gen_sub_i64(r_tmp1, r_tmp2, r_tmp2);
+            tcg_gen_sub_i64(r_tmp1, r_tmp2, r_tmp1);
             tcg_temp_free(r_tmp2);
             tcg_gen_trunc_i64_tl(t0, r_tmp1);
             tcg_gen_shri_i64(r_tmp1, r_tmp1, 32);
