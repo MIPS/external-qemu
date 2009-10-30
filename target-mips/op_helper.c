@@ -1912,6 +1912,115 @@ void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
     else
         do_raise_exception(EXCP_DBE);
 }
+
+
+/*
+ * The following functions are address translation helper functions 
+ * for fast memory access in QEMU. 
+ */
+static unsigned long v2p_mmu(target_ulong addr, int is_user)
+{
+    int index;
+    target_ulong tlb_addr;
+    target_phys_addr_t physaddr;
+    void *retaddr;
+
+    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+redo:
+    tlb_addr = env->tlb_table[is_user][index].addr_read;
+    if ((addr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+        physaddr = addr + env->tlb_table[is_user][index].addend;
+    } else {
+        /* the page is not in the TLB : fill it */
+        retaddr = GETPC();
+        tlb_fill(addr, 0, is_user, retaddr);
+        goto redo;
+    }
+    return physaddr;
+}
+
+/* 
+ * translation from virtual address of simulated OS 
+ * to the address of simulation host (not the physical 
+ * address of simulated OS.
+ */
+target_phys_addr_t v2p(target_ulong ptr, int is_user)
+{
+    CPUState *saved_env;
+    int index;
+    target_ulong addr;
+    target_phys_addr_t physaddr;
+
+    saved_env = env;
+    env = cpu_single_env;
+    addr = ptr;
+    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    if (__builtin_expect(env->tlb_table[is_user][index].addr_read != 
+                (addr & TARGET_PAGE_MASK), 0)) {
+        physaddr = v2p_mmu(addr, is_user);
+    } else {
+	    physaddr = (target_phys_addr_t)addr + env->tlb_table[is_user][index].addend;
+    }
+    env = saved_env;
+    return physaddr;
+}
+
+#define MINSIZE(x,y)    ((x) < (y) ? (x) : (y))
+/* copy memory from the simulated virtual space to a buffer in QEMU */
+void vmemcpy(target_ulong ptr, char *buf, int size)
+{
+    if (buf == NULL) return;
+    while (size) {
+        int page_remain = TARGET_PAGE_SIZE - (ptr & ~TARGET_PAGE_MASK);
+        int to_copy = MINSIZE(size, page_remain);
+        char *phys = (char *)v2p(ptr, 0);
+        if (phys == NULL) return;
+        memcpy(buf, phys, to_copy);
+        ptr += to_copy;
+        buf += to_copy;
+        size -= to_copy;
+    }
+}
+
+/* copy memory from the QEMU buffer to simulated virtual space */
+void pmemcpy(target_ulong ptr, const char *buf, int size)
+{
+    if (buf == NULL) return;
+    while (size) {
+        int page_remain = TARGET_PAGE_SIZE - (ptr & ~TARGET_PAGE_MASK);
+        int to_copy = MINSIZE(size, page_remain);
+        char *phys = (char *)v2p(ptr, 0);
+        if (phys == NULL) return;
+        memcpy(phys, buf, to_copy);
+        ptr += to_copy;
+        buf += to_copy;
+        size -= to_copy;
+    }
+}
+
+/* copy a string from the simulated virtual space to a buffer in QEMU */
+void vstrcpy(target_ulong ptr, char *buf, int max)
+{
+    char *phys = 0;
+    unsigned long page = 0;
+
+    if (buf == NULL) return;
+
+    while (max) {
+        if ((ptr & TARGET_PAGE_MASK) != page) {
+            phys = (char *)v2p(ptr, 0);
+            page = ptr & TARGET_PAGE_MASK;
+        }
+        *buf = *phys;
+        if (*phys == '\0')
+            return;
+        ptr ++;
+        buf ++;
+        phys ++;
+        max --;
+    }
+}
+
 #endif /* !CONFIG_USER_ONLY */
 
 /* Complex FPU operations which may need stack space. */
