@@ -9105,7 +9105,7 @@ int main(int argc, char **argv)
                 bios_dir = optarg;
                 break;
             case QEMU_OPTION_S:
-#if 1  /* ANDROID */
+#if 0  /* ANDROID */
                 fprintf(stderr, "Sorry, stopped launch is not supported in the Android emulator\n" );
                 exit(1);
 #else
