@@ -80,8 +80,6 @@ static void android_load_kernel(CPUState *env, int ram_size, const char *kernel_
     }
     env->active_tc.PC = (int32_t)kernel_entry;
 
-    printf("kernel_entry %llx kernel_high %lx \n",kernel_entry,kernel_high);
-
     /* load initrd */
     initrd_size = 0;
     initrd_offset = 0;
@@ -95,8 +93,10 @@ static void android_load_kernel(CPUState *env, int ram_size, const char *kernel_
                         initrd_filename);
                 exit(1);
             }
-            initrd_size = load_image(initrd_filename,
-                                     phys_ram_base + initrd_offset);
+            initrd_size = load_image_targphys(initrd_filename,
+                                               initrd_offset,
+                                               ram_size - initrd_offset);
+
     }
         if (initrd_size == (target_ulong) -1) {
         fprintf(stderr, "qemu: could not load initial ram disk '%s'\n",
@@ -109,12 +109,24 @@ static void android_load_kernel(CPUState *env, int ram_size, const char *kernel_
      * kernel will copy the command line to a loca buffer
      */
     cmdline = ram_size - TARGET_PAGE_SIZE;
+    char kernel_cmd[1024];
+    if (initrd_size > 0)
+        sprintf (kernel_cmd, "%s rd_start=0x" TARGET_FMT_lx " rd_size=%li",
+                       kernel_cmdline,
+                       PHYS_TO_VIRT(initrd_offset), initrd_size);
+    else
+        strcpy (kernel_cmd, kernel_cmdline);
+
+    cpu_physical_memory_write(ram_size - TARGET_PAGE_SIZE, (void *)kernel_cmd, strlen(kernel_cmd) + 1);
+   
+#if 0
     if (initrd_size > 0)
         sprintf (phys_ram_base+cmdline, "%s rd_start=0x" TARGET_FMT_lx " rd_size=%li",
                        kernel_cmdline,
                        PHYS_TO_VIRT(initrd_offset), initrd_size);
     else
         strcpy (phys_ram_base+cmdline, kernel_cmdline);
+#endif
 
     env->active_tc.gpr[4] = PHYS_TO_VIRT(cmdline);/* a0 */
     env->active_tc.gpr[5] = ram_size;       /* a1 */
@@ -124,9 +136,9 @@ static void android_load_kernel(CPUState *env, int ram_size, const char *kernel_
 }
 
 
-static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
-    const char *boot_device, DisplayState *ds, 
-    const char *kernel_filename, 
+static void android_mips_init_(ram_addr_t ram_size,
+    const char *boot_device,
+    const char *kernel_filename,
     const char *kernel_cmdline,
     const char *initrd_filename,
     const char *cpu_model)
@@ -134,6 +146,8 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
     CPUState *env;
     qemu_irq *goldfish_pic;
     int i;
+    ram_addr_t ram_offset;
+    DisplayState*  ds = get_displaystate();
 
     if (!cpu_model)
         //cpu_model = "mips32";
@@ -143,7 +157,8 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
 
     register_savevm( "cpu", 0, MIPS_CPU_SAVE_VERSION, cpu_save, cpu_load, env );
 
-    cpu_register_physical_memory(0, ram_size, IO_MEM_RAM);
+    ram_offset = qemu_ram_alloc(ram_size);
+    cpu_register_physical_memory(0, ram_size, ram_offset | IO_MEM_RAM);
 
     /* Init internal devices */
     cpu_mips_irq_init_cpu(env);
@@ -169,7 +184,6 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
 
     goldfish_tty_add(serial_hds[0], 0, GOLDFISH_TTY, 4);
     for(i = 1; i < MAX_SERIAL_PORTS; i++) {
-        //printf("android_mips_init serial %d %x\n", i, serial_hds[i]);
         if(serial_hds[i]) {
             goldfish_tty_add(serial_hds[i], i, 0, 0);
         }
@@ -196,7 +210,6 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
 
     goldfish_fb_init(ds, 0);
 #ifdef HAS_AUDIO
-    AUD_init();
     goldfish_audio_init(GOLDFISH_AUDIO, 0, audio_input_source);
 #endif
     {
@@ -241,8 +254,16 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
 QEMUMachine android_mips_machine = {
     "android_mips",
     "MIPS Android Emulator",
-    android_mips_init,
+    android_mips_init_,
     0,
     0,
+    1,
     NULL
 };
+
+static void android_mips_init(void)
+{
+    qemu_register_machine(&android_mips_machine);
+}
+
+machine_init(android_mips_init);
