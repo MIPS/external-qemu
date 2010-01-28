@@ -5,6 +5,8 @@
 
 #define ELF_MACHINE	EM_MIPS
 
+#define CPUState struct CPUMIPSState
+
 #include "config.h"
 #include "mips-defs.h"
 #include "cpu-defs.h"
@@ -39,10 +41,10 @@ struct CPUMIPSTLBContext {
     uint32_t nb_tlb;
     uint32_t tlb_in_use;
     int (*map_address) (struct CPUMIPSState *env, target_ulong *physical, int *prot, target_ulong address, int rw, int access_type);
-    void (*do_tlbwi) (void);
-    void (*do_tlbwr) (void);
-    void (*do_tlbp) (void);
-    void (*do_tlbr) (void);
+    void (*helper_tlbwi) (void);
+    void (*helper_tlbwr) (void);
+    void (*helper_tlbp) (void);
+    void (*helper_tlbr) (void);
     union {
         struct {
             r4k_tlb_t tlb[MIPS_TLB_MAX];
@@ -84,9 +86,9 @@ struct CPUMIPSFPUContext {
 #define FCR0_REV 0
     /* fcsr */
     uint32_t fcr31;
-#define SET_FP_COND(num,env)     do { ((env)->fcr31) |= ((num) ? (1 << ((num) + 24)) : (1 << 23)); } while(0)
-#define CLEAR_FP_COND(num,env)   do { ((env)->fcr31) &= ~((num) ? (1 << ((num) + 24)) : (1 << 23)); } while(0)
-#define GET_FP_COND(env)         ((((env)->fcr31 >> 24) & 0xfe) | (((env)->fcr31 >> 23) & 0x1))
+#define SET_FP_COND(num,env)     do { ((env).fcr31) |= ((num) ? (1 << ((num) + 24)) : (1 << 23)); } while(0)
+#define CLEAR_FP_COND(num,env)   do { ((env).fcr31) &= ~((num) ? (1 << ((num) + 24)) : (1 << 23)); } while(0)
+#define GET_FP_COND(env)         ((((env).fcr31 >> 24) & 0xfe) | (((env).fcr31 >> 23) & 0x1))
 #define GET_FP_CAUSE(reg)        (((reg) >> 12) & 0x3f)
 #define GET_FP_ENABLE(reg)       (((reg) >>  7) & 0x1f)
 #define GET_FP_FLAGS(reg)        (((reg) >>  2) & 0x1f)
@@ -132,6 +134,7 @@ typedef struct mips_def_t mips_def_t;
 
 #define MIPS_SHADOW_SET_MAX 16
 #define MIPS_TC_MAX 5
+#define MIPS_FPU_MAX 1
 #define MIPS_DSP_ACC 4
 
 typedef struct TCState TCState;
@@ -170,11 +173,12 @@ struct TCState {
 typedef struct CPUMIPSState CPUMIPSState;
 struct CPUMIPSState {
     TCState active_tc;
+    CPUMIPSFPUContext active_fpu;
 
     CPUMIPSMVPContext *mvp;
     CPUMIPSTLBContext *tlb;
-    CPUMIPSFPUContext *fpu;
     uint32_t current_tc;
+    uint32_t current_fpu;
 
     uint32_t SEGBITS;
     uint32_t PABITS;
@@ -404,11 +408,12 @@ struct CPUMIPSState {
     int32_t CP0_DESAVE;
     /* We waste some space so we can handle shadow registers like TCs. */
     TCState tcs[MIPS_SHADOW_SET_MAX];
+    CPUMIPSFPUContext fpus[MIPS_FPU_MAX];
     /* Qemu */
     int error_code;
     uint32_t hflags;    /* CPU State */
     /* TMASK defines different execution modes */
-#define MIPS_HFLAG_TMASK  0x01FF
+#define MIPS_HFLAG_TMASK  0x03FF
 #define MIPS_HFLAG_MODE   0x0007 /* execution modes                    */
     /* The KSU flags must be the lowest bits in hflags. The flag order
        must be the same as defined for CP0 Status. This allows to use
@@ -427,17 +432,18 @@ struct CPUMIPSState {
        and RSQRT.D.  */
 #define MIPS_HFLAG_COP1X  0x0080 /* COP1X instructions enabled         */
 #define MIPS_HFLAG_RE     0x0100 /* Reversed endianness                */
+#define MIPS_HFLAG_UX     0x0200 /* 64-bit user mode                   */
     /* If translation is interrupted between the branch instruction and
      * the delay slot, record what type of branch it is so that we can
      * resume translation properly.  It might be possible to reduce
      * this from three bits to two.  */
-#define MIPS_HFLAG_BMASK  0x0e00
-#define MIPS_HFLAG_B      0x0200 /* Unconditional branch               */
-#define MIPS_HFLAG_BC     0x0400 /* Conditional branch                 */
-#define MIPS_HFLAG_BL     0x0600 /* Likely branch                      */
-#define MIPS_HFLAG_BR     0x0800 /* branch to register (can't link TB) */
+#define MIPS_HFLAG_BMASK  0x1C00
+#define MIPS_HFLAG_B      0x0400 /* Unconditional branch               */
+#define MIPS_HFLAG_BC     0x0800 /* Conditional branch                 */
+#define MIPS_HFLAG_BL     0x0C00 /* Likely branch                      */
+#define MIPS_HFLAG_BR     0x1000 /* branch to register (can't link TB) */
     target_ulong btarget;        /* Jump / branch target               */
-    int bcond;                   /* Branch condition (if needed)       */
+    target_ulong bcond;          /* Branch condition (if needed)       */
 
     int SYNCI_Step; /* Address step size for SYNCI */
     int CCRes; /* Cycle count resolution/divisor */
@@ -460,17 +466,15 @@ int fixed_mmu_map_address (CPUMIPSState *env, target_ulong *physical, int *prot,
                            target_ulong address, int rw, int access_type);
 int r4k_map_address (CPUMIPSState *env, target_ulong *physical, int *prot,
                      target_ulong address, int rw, int access_type);
-void r4k_do_tlbwi (void);
-void r4k_do_tlbwr (void);
-void r4k_do_tlbp (void);
-void r4k_do_tlbr (void);
-void r4k_helper_ptw_tlbrefill(CPUMIPSState *env);
+void r4k_helper_tlbwi (void);
+void r4k_helper_tlbwr (void);
+void r4k_helper_tlbp (void);
+void r4k_helper_tlbr (void);
 void mips_cpu_list (FILE *f, int (*cpu_fprintf)(FILE *f, const char *fmt, ...));
 
 void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
-                          int unused);
+                          int unused, int size);
 
-#define CPUState CPUMIPSState
 #define cpu_init cpu_mips_init
 #define cpu_exec cpu_mips_exec
 #define cpu_gen_code cpu_mips_gen_code
@@ -499,6 +503,7 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 }
 
 #include "cpu-all.h"
+#include "exec-all.h"
 
 /* Memory access type :
  * may be needed for precise access rights control and precise exceptions.
@@ -557,13 +562,39 @@ enum {
 
 int cpu_mips_exec(CPUMIPSState *s);
 CPUMIPSState *cpu_mips_init(const char *cpu_model);
-uint32_t cpu_mips_get_clock (void);
+//~ uint32_t cpu_mips_get_clock (void);
 int cpu_mips_signal_handler(int host_signum, void *pinfo, void *puc);
 
-#define CPU_PC_FROM_TB(env, tb) do { \
-    env->active_tc.PC = tb->pc; \
-    env->hflags &= ~MIPS_HFLAG_BMASK; \
-    env->hflags |= tb->flags & MIPS_HFLAG_BMASK; \
-    } while (0)
+/* mips_timer.c */
+uint32_t cpu_mips_get_random (CPUState *env);
+uint32_t cpu_mips_get_count (CPUState *env);
+void cpu_mips_store_count (CPUState *env, uint32_t value);
+void cpu_mips_store_compare (CPUState *env, uint32_t value);
+void cpu_mips_start_count(CPUState *env);
+void cpu_mips_stop_count(CPUState *env);
+
+/* mips_int.c */
+void cpu_mips_update_irq (CPUState *env);
+
+/* helper.c */
+int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
+                               int mmu_idx, int is_softmmu);
+void do_interrupt (CPUState *env);
+void r4k_invalidate_tlb (CPUState *env, int idx, int use_extra);
+
+static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
+{
+    env->active_tc.PC = tb->pc;
+    env->hflags &= ~MIPS_HFLAG_BMASK;
+    env->hflags |= tb->flags & MIPS_HFLAG_BMASK;
+}
+
+static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
+                                        target_ulong *cs_base, int *flags)
+{
+    *pc = env->active_tc.PC;
+    *cs_base = 0;
+    *flags = env->hflags & (MIPS_HFLAG_TMASK | MIPS_HFLAG_BMASK);
+}
 
 #endif /* !defined (__MIPS_CPU_H__) */
