@@ -4,13 +4,14 @@
 #define CONFIG_QEMU_PREFIX "/usr/gnemul/qemu-mips"
 #define TARGET_ARCH "mips"
 #define TARGET_MIPS 1
+#define TARGET_PHYS_ADDR_BITS  64
 #endif
 #ifdef TARGET_ARCH_arm
 #define CONFIG_QEMU_PREFIX "/usr/gnemul/qemu-arm"
 #define TARGET_ARCH "arm"
 #define TARGET_ARM 1
-#endif
 #define TARGET_PHYS_ADDR_BITS  32
+#endif
 #define CONFIG_TRACE 1
 #define CONFIG_NAND 1
 #define CONFIG_SHAPER 1
