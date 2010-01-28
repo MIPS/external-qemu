@@ -1,4 +1,4 @@
-/* 
+/*
  * MIPS CPU interrupt support.
  *
  */
