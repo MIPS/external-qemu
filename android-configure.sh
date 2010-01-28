@@ -29,6 +29,7 @@ OPTION_TRY_64=no
 OPTION_HELP=no
 OPTION_DEBUG=no
 OPTION_TARGET_ARCH=mips
+OPTION_SHOW=
 
 if [ -z "$CC" ] ; then
   CC=gcc
@@ -65,6 +66,8 @@ for opt do
   --try-64) OPTION_TRY_64=yes
   ;;
   --target-arch=*) OPTION_TARGET_ARCH=$optarg
+  ;;
+  --show) OPTION_SHOW=yes
   ;;
   *)
     echo "unknown option '$opt', use --help"
@@ -381,6 +384,7 @@ echo "BUILD_STANDALONE_EMULATOR := true" >> $config_mk
 if [ $OPTION_DEBUG = yes ] ; then
     echo "BUILD_DEBUG_EMULATOR := true" >> $config_mk
 fi
+echo "SHOW		:= $OPTION_SHOW" >> $config_mk
 
 # Build the config-host.h file
 #
