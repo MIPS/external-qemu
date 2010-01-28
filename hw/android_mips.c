@@ -55,6 +55,75 @@ uint32_t switch_test_write(void *opaque, uint32_t state)
 }
 #endif
 
+#define VIRT_TO_PHYS_ADDEND (-((int64_t)(int32_t)0x80000000))
+
+#define PHYS_TO_VIRT(x) ((x) | ~(target_ulong)0x7fffffff)
+
+static void android_load_kernel(CPUState *env, int ram_size, const char *kernel_filename,
+              const char *kernel_cmdline, const char *initrd_filename)
+{
+    int initrd_size;
+    ram_addr_t initrd_offset;
+    uint64_t kernel_entry, kernel_low, kernel_high;
+    unsigned int cmdline;
+
+    /* Load the kernel.  */
+    if (!kernel_filename) {
+        fprintf(stderr, "Kernel image must be specified\n");
+        exit(1);
+    }
+    if (load_elf(kernel_filename, VIRT_TO_PHYS_ADDEND,
+         (uint64_t *)&kernel_entry, (uint64_t *)&kernel_low,
+         (uint64_t *)&kernel_high) < 0) {
+    fprintf(stderr, "qemu: could not load kernel '%s'\n", kernel_filename);
+    exit(1);
+    }
+    env->active_tc.PC = (int32_t)kernel_entry;
+
+    printf("kernel_entry %llx kernel_high %lx \n",kernel_entry,kernel_high);
+
+    /* load initrd */
+    initrd_size = 0;
+    initrd_offset = 0;
+    if (initrd_filename) {
+    initrd_size = get_image_size (initrd_filename);
+    if (initrd_size > 0) {
+        initrd_offset = (kernel_high + ~TARGET_PAGE_MASK) & TARGET_PAGE_MASK;
+            if (initrd_offset + initrd_size > ram_size) {
+        fprintf(stderr,
+                        "qemu: memory too small for initial ram disk '%s'\n",
+                        initrd_filename);
+                exit(1);
+            }
+            initrd_size = load_image(initrd_filename,
+                                     phys_ram_base + initrd_offset);
+    }
+        if (initrd_size == (target_ulong) -1) {
+        fprintf(stderr, "qemu: could not load initial ram disk '%s'\n",
+            initrd_filename);
+            exit(1);
+        }
+    }
+
+    /* Store command line in top page of memory
+     * kernel will copy the command line to a loca buffer
+     */
+    cmdline = ram_size - TARGET_PAGE_SIZE;
+    if (initrd_size > 0)
+        sprintf (phys_ram_base+cmdline, "%s rd_start=0x" TARGET_FMT_lx " rd_size=%li",
+                       kernel_cmdline,
+                       PHYS_TO_VIRT(initrd_offset), initrd_size);
+    else
+        strcpy (phys_ram_base+cmdline, kernel_cmdline);
+
+    env->active_tc.gpr[4] = PHYS_TO_VIRT(cmdline);/* a0 */
+    env->active_tc.gpr[5] = ram_size;       /* a1 */
+    env->active_tc.gpr[6] = 0;          /* a2 */
+    env->active_tc.gpr[7] = 0;          /* a3 */
+
+}
+
+
 static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
     const char *boot_device, DisplayState *ds, 
     const char *kernel_filename, 
@@ -165,17 +234,8 @@ static void android_mips_init(ram_addr_t ram_size, int vga_ram_size,
     }
 #endif
 
-#if 0
-    memset(&info, 0, sizeof info);
-    info.ram_size        = ram_size;
-    info.kernel_filename = kernel_filename;
-    info.kernel_cmdline  = kernel_cmdline;
-    info.initrd_filename = initrd_filename;
-    info.nb_cpus         = 1;
-    info.board_id        = 3232;
+    android_load_kernel(env, ram_size, kernel_filename, kernel_cmdline,initrd_filename);
 
-    mips_load_kernel(env, &info);
-#endif
 }
 
 QEMUMachine android_mips_machine = {
