@@ -19,7 +19,8 @@ MY_CFLAGS := $(CONFIG_INCLUDES) $(MY_OPTIM)
 #
 ifeq ($(BUILD_DEBUG_EMULATOR),true)
     MY_CFLAGS := $(CONFIG_INCLUDES) -O0 -g \
-                 -fno-PIC -falign-functions=0
+		-fno-PIC -falign-functions=0 \
+		-DTARGET_ARCH_$(TARGET_ARCH)
 endif
 
 MY_LDLIBS :=
@@ -206,6 +207,8 @@ LOCAL_CFLAGS += -I$(LOCAL_PATH) \
 ifeq ($(HOST_ARCH),ppc)
     LOCAL_CFLAGS += -D__powerpc__
 endif
+
+LOCAL_CFLAGS += -DNEED_CPU_H
 
 ifeq ($(TARGET_ARCH),arm)
 LOCAL_SRC_FILES += \
