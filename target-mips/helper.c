@@ -309,11 +309,18 @@ static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int r
                                       int mmu_idx, int is_softmmu)
 {
     int32_t saved_hflags;
+    target_ulong saved_badvaddr,saved_entryhi,saved_context;
 
     target_ulong pgd_addr,pt_addr,index;
     target_ulong fault_addr,ptw_phys;
     target_ulong elo_even,elo_odd;
     uint32_t page_valid;
+    int ret;
+
+    saved_badvaddr = env->CP0_BadVAddr;
+    saved_context = env->CP0_Context;
+    saved_entryhi = env->CP0_EntryHi;
+    saved_hflags = env->hflags;
 
     env->CP0_BadVAddr = address;
     env->CP0_Context = (env->CP0_Context & ~0x007fffff) |
@@ -321,7 +328,6 @@ static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int r
     env->CP0_EntryHi =
         (env->CP0_EntryHi & 0xFF) | (address & (TARGET_PAGE_MASK << 1));
 
-    saved_hflags = env->hflags;
     env->hflags = MIPS_HFLAG_KM;
 
     fault_addr = env->CP0_BadVAddr;
@@ -331,7 +337,9 @@ static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int r
     if (unlikely(!pgd_addr))
     {
         /*not valid pgd_addr,just return.*/
-        return TLBRET_NOMATCH;
+        //return TLBRET_NOMATCH;
+        ret = TLBRET_NOMATCH;
+        goto out;
     }
 
     ptw_phys = pgd_addr - (int32_t)0x80000000UL;
@@ -364,7 +372,10 @@ static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int r
     int n = !!(address & mask & ~(mask >> 1));
     /* Check access rights */
     if (!(n ? (elo_odd & 2) != 0 : (elo_even & 2) != 0))
-        return TLBRET_INVALID;
+    {
+        ret = TLBRET_INVALID;
+        goto out;
+    }
 
     if (rw == 0 || (n ? (elo_odd & 4) != 0 : (elo_even & 4) != 0)) {
         target_ulong physical = (n?(elo_odd >> 6) << 12 : (elo_even >> 6) << 12);
@@ -376,9 +387,17 @@ static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int r
         tlb_set_page(env, address & TARGET_PAGE_MASK,
                         physical & TARGET_PAGE_MASK, prot,
                         mmu_idx, is_softmmu);
-        return TLBRET_MATCH;
+        ret = TLBRET_MATCH;
+        goto out;
     }
-    return TLBRET_DIRTY;
+    ret = TLBRET_DIRTY;
+
+out:
+    env->CP0_BadVAddr = saved_badvaddr;
+    env->CP0_Context = saved_context;
+    env->CP0_EntryHi = saved_entryhi;
+    env->hflags = saved_hflags;
+    return ret;
 }
 
 int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
@@ -423,7 +442,6 @@ int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
      */
         if (ret == TLBRET_NOMATCH)
         {
-            cpu_mips_get_pgd(env);
             /*do tlb refill first. next time, ret will NOT be TLB_NOMATCH.*/
             ret = cpu_mips_tlb_refill(env,address,rw,mmu_idx,is_softmmu);
         }
