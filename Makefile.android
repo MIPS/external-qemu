@@ -8,12 +8,17 @@ CONFIG_DIRS     := \
 
 CONFIG_INCLUDES := $(CONFIG_DIRS:%=-I%)
 
-MY_OPTIM := -O2 -g -fno-PIC -falign-functions=0 -fomit-frame-pointer -DTARGET_ARCH_$(TARGET_ARCH)
+MY_OPTIM := -O2 -g -fno-PIC -falign-functions=0 -fomit-frame-pointer
 ifeq ($(BUILD_DEBUG_EMULATOR),true)
     MY_OPTIM := -O0 -g
 endif
 
-MY_CFLAGS := $(CONFIG_INCLUDES) $(MY_OPTIM)
+MY_CFLAGS := $(CONFIG_INCLUDES) $(MY_OPTIM) -DTARGET_ARCH_$(TARGET_ARCH)
+ifeq ($(TARGET_ARCH),mips)
+  ifeq ($(TARGET_CPU_ENDIAN),EB)
+    MY_CFLAGS += -DTARGET_WORDS_BIGENDIAN
+  endif
+endif
 
 # Overwrite configuration for debug builds.
 #
