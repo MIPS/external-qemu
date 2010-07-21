@@ -1166,7 +1166,16 @@ _getBuildImagePaths( AvdInfo*  i, AvdInfoParams*  params )
     if ( !imageLoader_load( l, IMAGE_OPTIONAL |
                                IMAGE_DONT_LOCK ) )
     {
+#ifdef TARGET_ARCH_mips
+#if defined(TARGET_WORDS_BIGENDIAN)
+#define  PREBUILT_KERNEL_PATH   "prebuilt/android-mips/kernel/kernel-eb-qemu"
+#else
+#define  PREBUILT_KERNEL_PATH   "prebuilt/android-mips/kernel/kernel-qemu"
+#endif
+#endif
+#ifdef TARGET_ARCH_arm
 #define  PREBUILT_KERNEL_PATH   "prebuilt/android-arm/kernel/kernel-qemu"
+#endif
         p = bufprint(temp, end, "%s/%s", i->androidBuildRoot,
                         PREBUILT_KERNEL_PATH);
         if (p >= end || !path_exists(temp)) {
