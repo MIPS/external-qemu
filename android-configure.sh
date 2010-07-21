@@ -25,6 +25,7 @@ OPTION_HELP=no
 OPTION_DEBUG=no
 OPTION_STATIC=no
 OPTION_MINGW=no
+OPTION_SHOW=
 
 if [ -z "$CC" ] ; then
   CC=gcc
@@ -63,6 +64,8 @@ for opt do
   --try-64) OPTION_TRY_64=yes
   ;;
   --static) OPTION_STATIC=yes
+  ;;
+  --show) OPTION_SHOW=yes
   ;;
   *)
     echo "unknown option '$opt', use --help"
@@ -398,6 +401,8 @@ if [ "$OPTION_MINGW" = "yes" ] ; then
     echo "USE_MINGW := 1" >> $config_mk
     echo "HOST_OS   := windows" >> $config_mk
 fi
+
+echo "SHOW		:= $OPTION_SHOW" >> $config_mk
 
 # Build the config-host.h file
 #
