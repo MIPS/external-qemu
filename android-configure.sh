@@ -17,6 +17,7 @@ cd `dirname $0`
 
 # Parse options
 OPTION_TARGETS=""
+OPTION_TARGET_ARCH=mips
 OPTION_DEBUG=no
 OPTION_IGNORE_AUDIO=no
 OPTION_NO_PREBUILTS=no
@@ -46,6 +47,8 @@ for opt do
   --debug) OPTION_DEBUG=yes
   ;;
   --install=*) OPTION_TARGETS="$OPTION_TARGETS $optarg";
+  ;;
+  --target-arch=*) OPTION_TARGET_ARCH=$optarg
   ;;
   --sdl-config=*) SDL_CONFIG=$optarg
   ;;
@@ -370,7 +373,7 @@ feature_check_header HAVE_BYTESWAP_H "<byteswap.h>"
 
 create_config_mk
 echo "" >> $config_mk
-echo "TARGET_ARCH       := arm" >> $config_mk
+echo "TARGET_ARCH       := $OPTION_TARGET_ARCH" >> $config_mk
 echo "HOST_PREBUILT_TAG := $TARGET_OS" >> $config_mk
 echo "PREBUILT          := $ANDROID_PREBUILT" >> $config_mk
 
