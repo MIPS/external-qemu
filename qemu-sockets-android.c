@@ -43,7 +43,7 @@ int inet_listen(const char *str, char *ostr, int olen,
                 SocketType socktype, int port_offset)
 {
     SockAddress**  list;
-    SockAddress*   e;
+    SockAddress*  volatile e;
     unsigned       flags = SOCKET_LIST_PASSIVE;
     char addr[64];
     char port[33];
