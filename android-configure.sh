@@ -29,6 +29,7 @@ OPTION_TRY_64=no
 OPTION_HELP=no
 OPTION_DEBUG=no
 OPTION_STATIC=no
+OPTION_SHOW=
 
 if [ -z "$CC" ] ; then
   CC=gcc
@@ -65,6 +66,8 @@ for opt do
   --try-64) OPTION_TRY_64=yes
   ;;
   --static) OPTION_STATIC=yes
+  ;;
+  --show) OPTION_SHOW=yes
   ;;
   *)
     echo "unknown option '$opt', use --help"
@@ -405,6 +408,8 @@ fi
 if [ -n "$ANDROID_SDK_TOOLS_REVISION" ] ; then
     echo "ANDROID_SDK_TOOLS_REVISION := $ANDROID_SDK_TOOLS_REVISION" >> $config_mk
 fi
+
+echo "SHOW		:= $OPTION_SHOW" >> $config_mk
 
 # Build the config-host.h file
 #
