@@ -27,7 +27,7 @@ endif
 
 MY_CFLAGS := $(CONFIG_INCLUDES) $(MY_OPTIM) -DTARGET_ARCH_$(TARGET_ARCH)
 ifeq ($(TARGET_ARCH),mips)
-  ifeq ($(TARGET_CPU_ENDIAN),EB)
+  ifeq ($(ARCH_HAS_BIGENDIAN),true)
     MY_CFLAGS += -DTARGET_WORDS_BIGENDIAN
   endif
 endif
