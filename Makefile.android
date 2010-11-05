@@ -299,7 +299,6 @@ LOCAL_SRC_FILES += \
                    target-arm/helper.c \
                    target-arm/translate.c \
                    target-arm/machine.c \
-                   translate-all.c \
                    hw/armv7m.c \
                    hw/armv7m_nvic.c \
                    arm-semi.c
