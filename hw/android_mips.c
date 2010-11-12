@@ -150,8 +150,7 @@ static void android_mips_init_(ram_addr_t ram_size,
     DisplayState*  ds = get_displaystate();
 
     if (!cpu_model)
-        //cpu_model = "mips32";
-        cpu_model = "4KEc";
+        cpu_model = "24Kf";
 
     env = cpu_init(cpu_model);
 
