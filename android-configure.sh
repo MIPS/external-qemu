@@ -25,8 +25,8 @@ OPTION_TRY_64=no
 OPTION_HELP=no
 OPTION_DEBUG=no
 OPTION_STATIC=no
-OPTION_MINGW=no
 OPTION_SHOW=
+OPTION_MINGW=no
 
 if [ -z "$CC" ] ; then
   CC=gcc
@@ -373,6 +373,7 @@ feature_check_header HAVE_BYTESWAP_H "<byteswap.h>"
 
 create_config_mk
 echo "" >> $config_mk
+#echo "TARGET_ARCH       := arm" >> $config_mk
 echo "TARGET_ARCH       := $OPTION_TARGET_ARCH" >> $config_mk
 echo "HOST_PREBUILT_TAG := $TARGET_OS" >> $config_mk
 echo "PREBUILT          := $ANDROID_PREBUILT" >> $config_mk

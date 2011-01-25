@@ -162,7 +162,6 @@ static void android_mips_init_(ram_addr_t ram_size,
     /* Init internal devices */
     cpu_mips_irq_init_cpu(env);
     cpu_mips_clock_init(env);
-    cpu_mips_irqctrl_init();
 
 #define GOLDFISH_INTERRUPT	0x1f000000
 #define GOLDFISH_DEVICEBUS	0x1f001000

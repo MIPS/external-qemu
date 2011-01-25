@@ -196,7 +196,7 @@ static void goldfish_fb_update_display(void *opaque)
             for (nn = 0; nn < width; nn++) {
                 unsigned   spix = src[nn];
                 unsigned   dpix = dst[nn];
-#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
+#if defined(WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
                 spix = ((spix << 8) | (spix >> 8)) & 0xffff;
 #endif
                 if (spix != dpix)
@@ -206,7 +206,7 @@ static void goldfish_fb_update_display(void *opaque)
             if (nn == width)
                 continue;
 
-#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
+#if defined(WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
             for ( ; nn < width; nn++ ) {
                 unsigned   spix = src[nn];
                 dst[nn] = (uint16_t)((spix << 8) | (spix >> 8));
@@ -228,7 +228,7 @@ static void goldfish_fb_update_display(void *opaque)
             uint16_t*  src   = (uint16_t*) src_line;
             uint16_t*  dst   = (uint16_t*) dst_line;
             int        len   = width*2;
-#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
+#if defined(WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
             int        nn;
 #endif
             int        dirty = 0;
@@ -247,7 +247,7 @@ static void goldfish_fb_update_display(void *opaque)
             if (!dirty)
                 continue;
 
-#if defined(HOST_WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
+#if defined(WORDS_BIGENDIAN) != defined(TARGET_WORDS_BIGENDIAN)
             for (nn = 0; nn < width; nn++ ) {
                 unsigned   spix = src[nn];
                 dst[nn] = (uint16_t)((spix << 8) | (spix >> 8));

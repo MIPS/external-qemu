@@ -1,3 +1,4 @@
+ifneq ($(filter arm mips,$(TARGET_ARCH)),)
 LOCAL_PATH:= $(call my-dir)
 
 # determine the host tag to use
@@ -219,7 +220,7 @@ LOCAL_CPP_EXTENSION             := .cc
 ELFF_CFLAGS    := -I$(LOCAL_PATH)/elff
 
 LOCAL_CFLAGS := $(MY_CFLAGS) $(LOCAL_CFLAGS) -fno-exceptions
-LOCAL_CFLAGS += -I$(LOCAL_PATH)/target-arm -I$(LOCAL_PATH)/fpu $(ELFF_CFLAGS)
+LOCAL_CFLAGS += -I$(LOCAL_PATH)/target-$(TARGET_ARCH) -I$(LOCAL_PATH)/fpu $(ELFF_CFLAGS)
 LOCAL_CFLAGS += $(ZLIB_CFLAGS) -I$(LOCAL_PATH)/$(ZLIB_DIR)
 
 ELFF_SOURCES := \
@@ -254,7 +255,7 @@ LOCAL_MODULE                    := emulator-memcheck
 MCHK_CFLAGS    := -I$(LOCAL_PATH)/memcheck -I$(LOCAL_PATH)/elff
 
 LOCAL_CFLAGS := $(MY_CFLAGS) $(LOCAL_CFLAGS)
-LOCAL_CFLAGS += -I$(LOCAL_PATH)/target-arm -I$(LOCAL_PATH)/fpu $(MCHK_CFLAGS)
+LOCAL_CFLAGS += -I$(LOCAL_PATH)/target-$(TARGET_ARCH) -I$(LOCAL_PATH)/fpu $(MCHK_CFLAGS)
 LOCAL_CFLAGS += $(ZLIB_CFLAGS) -I$(LOCAL_PATH)/$(ZLIB_DIR)
 
 MCHK_SOURCES := \
@@ -498,7 +499,7 @@ EMULATOR_CORE_CFLAGS += -DNEED_CPU_H
 
 # Common includes for the emulator
 EMULATOR_CORE_CFLAGS += -I$(LOCAL_PATH)/ \
-                        -I$(LOCAL_PATH)/target-arm \
+                        -I$(LOCAL_PATH)/target-$(TARGET_ARCH) \
                         -I$(LOCAL_PATH)/fpu \
                         $(TCG_CFLAGS) \
                         $(HW_CFLAGS) \
@@ -607,8 +608,11 @@ endif
 
 # hw sources
 #
-CORE_HW_SOURCES = hw/$(TARGET_ARCH)_boot.c \
-                  hw/android_$(TARGET_ARCH).c
+ifeq ($(TARGET_ARCH),arm)
+CORE_HW_SOURCES += hw/arm_boot.c
+endif
+
+CORE_HW_SOURCES +=  hw/android_$(TARGET_ARCH).c
 
 # migration sources
 #
@@ -966,3 +970,5 @@ LOCAL_MODULE := emulator
 LOCAL_SRC_FILES += $(SDLMAIN_SOURCES)
 
 include $(BUILD_HOST_EXECUTABLE)
+
+endif  # TARGET_ARCH == arm || TARGET_ARCH == mips
