@@ -1607,6 +1607,7 @@ static void gen_arith (CPUState *env, DisasContext *ctx, uint32_t opc,
             tcg_gen_ext32s_tl(cpu_gpr[rd], cpu_gpr[rd]);
         } else if (rs != 0 && rt == 0) {
             tcg_gen_mov_tl(cpu_gpr[rd], cpu_gpr[rs]);
+            tcg_gen_ext32s_tl(cpu_gpr[rd], cpu_gpr[rd]);
         } else {
             tcg_gen_movi_tl(cpu_gpr[rd], 0);
         }
