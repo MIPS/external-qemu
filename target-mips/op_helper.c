@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
  */
 #include <stdlib.h>
+#include <memory.h>
 #include "exec.h"
 
 #include "host-utils.h"
@@ -1490,21 +1491,88 @@ target_ulong helper_yield(target_ulong arg1)
     return env->CP0_YQMask;
 }
 
+extern unsigned long valid_bitsmap[0x2000];
+extern r4k_tlb_t tlb_cache[0x40000];
+
 #ifndef CONFIG_USER_ONLY
+static void inline r4k_invalidate_tlb_shadow (CPUState *env, int idx)
+{
+    r4k_tlb_t *tlb;
+    target_ulong addr;
+    target_ulong end;
+    uint8_t ASID = env->CP0_EntryHi & 0xFF;
+    target_ulong mask;
+
+    tlb = &env->tlb->mmu.r4k.tlb[idx];
+    /* The qemu TLB is flushed when the ASID changes, so no need to
+    flush these entries again.  */
+    if (tlb->G == 0 && tlb->ASID != ASID) {
+        return;
+    }
+
+    /* put the tlb to tlb hash table*/
+    int index = ((tlb->VPN>>5)&0x1ff00) | tlb->ASID;
+    index |= (tlb->VPN>>13)&0x20000;
+    if (!__test_and_set_bit(index&0x1f,&valid_bitsmap[index>>5]))
+    {
+        /*if this TLB shadow is not valid, we copy TLB*/
+        tlb_cache[index] = *tlb;
+        /*the BIT has been setten in __test_and_set_bit*/
+        return;
+    }
+}
+
+static void inline r4k_invalidate_tlb (CPUState *env, int idx)
+{
+    r4k_tlb_t *tlb;
+    target_ulong addr;
+    target_ulong end;
+    uint8_t ASID = env->CP0_EntryHi & 0xFF;
+    target_ulong mask;
+
+    tlb = &env->tlb->mmu.r4k.tlb[idx];
+    /* The qemu TLB is flushed when the ASID changes, so no need to
+    flush these entries again.  */
+    if (tlb->G == 0 && tlb->ASID != ASID) {
+        return;
+    }
+
+    /* 1k pages are not supported. */
+    mask = tlb->PageMask | ~(TARGET_PAGE_MASK << 1);
+    if (tlb->V0) {
+        addr = tlb->VPN & ~mask;
+#if defined(TARGET_MIPS64)
+        if (addr >= (0xFFFFFFFF80000000ULL & env->SEGMask)) {
+            addr |= 0x3FFFFF0000000000ULL;
+        }
+#endif
+        end = addr | (mask >> 1);
+        while (addr < end) {
+            tlb_flush_page (env, addr);
+            addr += TARGET_PAGE_SIZE;
+        }
+    }
+    if (tlb->V1) {
+        addr = (tlb->VPN & ~mask) | ((mask >> 1) + 1);
+#if defined(TARGET_MIPS64)
+        if (addr >= (0xFFFFFFFF80000000ULL & env->SEGMask)) {
+            addr |= 0x3FFFFF0000000000ULL;
+        }
+#endif
+        end = addr | mask;
+        while (addr - 1 < end) {
+            tlb_flush_page (env, addr);
+            addr += TARGET_PAGE_SIZE;
+        }
+    }
+}
+
 /* TLB management */
 void cpu_mips_tlb_flush (CPUState *env, int flush_global)
 {
     /* Flush qemu's TLB and discard all shadowed entries.  */
     tlb_flush (env, flush_global);
     env->tlb->tlb_in_use = env->tlb->nb_tlb;
-}
-
-static void r4k_mips_tlb_flush_extra (CPUState *env, int first)
-{
-    /* Discard entries from env->tlb[first] onwards.  */
-    while (env->tlb->tlb_in_use > first) {
-        r4k_invalidate_tlb(env, --env->tlb->tlb_in_use, 0);
-    }
 }
 
 static void r4k_fill_tlb (int idx)
@@ -1530,26 +1598,68 @@ static void r4k_fill_tlb (int idx)
     tlb->PFN[1] = (env->CP0_EntryLo1 >> 6) << 12;
 }
 
+void r4k_helper_ptw_tlbrefill(CPUState *target_env)
+{
+   CPUState *saved_env;
+
+   /* Save current 'env' value */
+   saved_env = env;
+   env = target_env;
+  
+   /* Do TLB load on behalf of Page Table Walk */  
+    int r = cpu_mips_get_random(env);
+    r4k_invalidate_tlb_shadow(env, r);
+    r4k_fill_tlb(r);
+
+   /* Restore 'env' value */
+   env = saved_env;
+}
+
 void r4k_helper_tlbwi (void)
 {
-    int idx;
+    r4k_tlb_t *tlb;
+    target_ulong tag;
+    target_ulong VPN;
+    target_ulong mask;
 
-    idx = (env->CP0_Index & ~0x80000000) % env->tlb->nb_tlb;
+    /* If tlbwi is trying to upgrading access permissions on current entry,
+     * we do not need to flush tlb hash table.
+     */
+    tlb = &env->tlb->mmu.r4k.tlb[env->CP0_Index % env->tlb->nb_tlb];
+    mask = tlb->PageMask | ~(TARGET_PAGE_MASK << 1);
+    tag = env->CP0_EntryHi & ~mask;
+    VPN = tlb->VPN & ~mask;
+    if (VPN == tag)
+    {
+        if (tlb->ASID == (env->CP0_EntryHi & 0xFF))
+        {
+            tlb->V0 = (env->CP0_EntryLo0 & 2) != 0;
+            tlb->D0 = (env->CP0_EntryLo0 & 4) != 0;
+            tlb->C0 = (env->CP0_EntryLo0 >> 3) & 0x7;
+            tlb->PFN[0] = (env->CP0_EntryLo0 >> 6) << 12;
+            tlb->V1 = (env->CP0_EntryLo1 & 2) != 0;
+            tlb->D1 = (env->CP0_EntryLo1 & 4) != 0;
+            tlb->C1 = (env->CP0_EntryLo1 >> 3) & 0x7;
+            tlb->PFN[1] = (env->CP0_EntryLo1 >> 6) << 12;
+            return;
+        }
+    }
 
-    /* Discard cached TLB entries.  We could avoid doing this if the
-       tlbwi is just upgrading access permissions on the current entry;
-       that might be a further win.  */
-    r4k_mips_tlb_flush_extra (env, env->tlb->nb_tlb);
 
-    r4k_invalidate_tlb(env, idx, 0);
-    r4k_fill_tlb(idx);
+    /* Discard TLB hash table.*/
+    memset(valid_bitsmap,0,sizeof(valid_bitsmap));
+    /*flush all the tlb cache */
+    cpu_mips_tlb_flush (env, 1);
+
+    r4k_invalidate_tlb(env, env->CP0_Index % env->tlb->nb_tlb);
+    r4k_fill_tlb(env->CP0_Index % env->tlb->nb_tlb);
 }
 
 void r4k_helper_tlbwr (void)
 {
     int r = cpu_mips_get_random(env);
 
-    r4k_invalidate_tlb(env, r, 1);
+    r4k_invalidate_tlb_shadow(env, r);
     r4k_fill_tlb(r);
 }
 
@@ -1561,6 +1671,8 @@ void r4k_helper_tlbp (void)
     target_ulong VPN;
     uint8_t ASID;
     int i;
+    target_ulong addr;
+    target_ulong end;
 
     ASID = env->CP0_EntryHi & 0xFF;
     for (i = 0; i < env->tlb->nb_tlb; i++) {
@@ -1570,27 +1682,57 @@ void r4k_helper_tlbp (void)
         tag = env->CP0_EntryHi & ~mask;
         VPN = tlb->VPN & ~mask;
         /* Check ASID, virtual page number & size */
-        if ((tlb->G == 1 || tlb->ASID == ASID) && VPN == tag) {
+        if (unlikely((tlb->G == 1 || tlb->ASID == ASID) && VPN == tag)) {
             /* TLB match */
             env->CP0_Index = i;
             break;
         }
     }
+
     if (i == env->tlb->nb_tlb) {
-        /* No match.  Discard any shadow entries, if any of them match.  */
-        for (i = env->tlb->nb_tlb; i < env->tlb->tlb_in_use; i++) {
-            tlb = &env->tlb->mmu.r4k.tlb[i];
-            /* 1k pages are not supported. */
+        /* No match.  Discard any shadow entries, if any of them match. */
+        int index = ((env->CP0_EntryHi>>5)&0x1ff00) | ASID;
+        index |= (env->CP0_EntryHi>>13)&0x20000;
+        if (test_bit(index&0x1f,&valid_bitsmap[index>>5]))
+        {
+            /*Check TLB*/
+            tlb = &tlb_cache[index];
             mask = tlb->PageMask | ~(TARGET_PAGE_MASK << 1);
             tag = env->CP0_EntryHi & ~mask;
             VPN = tlb->VPN & ~mask;
             /* Check ASID, virtual page number & size */
-            if ((tlb->G == 1 || tlb->ASID == ASID) && VPN == tag) {
-                r4k_mips_tlb_flush_extra (env, i);
-                break;
+            if (VPN == tag) {
+                /*FLUSH THE SHADOW PAGE*/
+                if (tlb->V0) {
+                    addr = tlb->VPN & ~mask;
+#if defined(TARGET_MIPS64)
+                    if (addr >= (0xFFFFFFFF80000000ULL & env->SEGMask)) {
+                        addr |= 0x3FFFFF0000000000ULL;
+                    }
+#endif
+                    end = addr | (mask >> 1);
+                    while (addr < end) {
+                        tlb_flush_page (env, addr);
+                        addr += TARGET_PAGE_SIZE;
+                    }
+                }
+                if (tlb->V1) {
+                    addr = (tlb->VPN & ~mask) | ((mask >> 1) + 1);
+#if defined(TARGET_MIPS64)
+                    if (addr >= (0xFFFFFFFF80000000ULL & env->SEGMask)) {
+                        addr |= 0x3FFFFF0000000000ULL;
+                    }
+#endif
+                    end = addr | mask;
+                    while (addr - 1 < end) {
+                        tlb_flush_page (env, addr);
+                        addr += TARGET_PAGE_SIZE;
+                    }
+                }
+               /*Clear the bit*/
+               __change_bit(index&0x1f,&valid_bitsmap[index>>5]);
             }
         }
-
         env->CP0_Index |= 0x80000000;
     }
 }
@@ -1599,17 +1741,18 @@ void r4k_helper_tlbr (void)
 {
     r4k_tlb_t *tlb;
     uint8_t ASID;
-    int idx;
 
     ASID = env->CP0_EntryHi & 0xFF;
-    idx = (env->CP0_Index & ~0x80000000) % env->tlb->nb_tlb;
-    tlb = &env->tlb->mmu.r4k.tlb[idx];
+    tlb = &env->tlb->mmu.r4k.tlb[env->CP0_Index % env->tlb->nb_tlb];
 
     /* If this will change the current ASID, flush qemu's TLB.  */
     if (ASID != tlb->ASID)
         cpu_mips_tlb_flush (env, 1);
 
-    r4k_mips_tlb_flush_extra(env, env->tlb->nb_tlb);
+    /* Discard TLB hash table.*/
+    memset(valid_bitsmap,0,sizeof(valid_bitsmap));
+    /*flush all the tlb cache */
+    cpu_mips_tlb_flush (env, 1);
 
     env->CP0_EntryHi = tlb->VPN | tlb->ASID;
     env->CP0_PageMask = tlb->PageMask;
@@ -1855,6 +1998,80 @@ void do_unassigned_access(target_phys_addr_t addr, int is_write, int is_exec,
     else
         helper_raise_exception(EXCP_DBE);
 }
+/*
+ * The following functions are address translation helper functions 
+ * for fast memory access in QEMU. 
+ */
+static unsigned long v2p_mmu(target_ulong addr, int is_user)
+{
+    int index;
+    target_ulong tlb_addr;
+    target_phys_addr_t physaddr;
+    void *retaddr;
+
+    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+redo:
+    tlb_addr = env->tlb_table[is_user][index].addr_read;
+    if ((addr & TARGET_PAGE_MASK) == (tlb_addr & (TARGET_PAGE_MASK | TLB_INVALID_MASK))) {
+        physaddr = addr + env->tlb_table[is_user][index].addend;
+    } else {
+        /* the page is not in the TLB : fill it */
+        retaddr = GETPC();
+        tlb_fill(addr, 0, is_user, retaddr);
+        goto redo;
+    }
+    return physaddr;
+}
+
+/* 
+ * translation from virtual address of simulated OS 
+ * to the address of simulation host (not the physical 
+ * address of simulated OS.
+ */
+target_phys_addr_t v2p(target_ulong ptr, int is_user)
+{
+    CPUState *saved_env;
+    int index;
+    target_ulong addr;
+    target_phys_addr_t physaddr;
+
+    saved_env = env;
+    env = cpu_single_env;
+    addr = ptr;
+    index = (addr >> TARGET_PAGE_BITS) & (CPU_TLB_SIZE - 1);
+    if (__builtin_expect(env->tlb_table[is_user][index].addr_read != 
+                (addr & TARGET_PAGE_MASK), 0)) {
+        physaddr = v2p_mmu(addr, is_user);
+    } else {
+	    physaddr = (target_phys_addr_t)addr + env->tlb_table[is_user][index].addend;
+    }
+    env = saved_env;
+    return physaddr;
+}
+
+/* copy a string from the simulated virtual space to a buffer in QEMU */
+void vstrcpy(target_ulong ptr, char *buf, int max)
+{
+    char *phys = 0;
+    unsigned long page = 0;
+
+    if (buf == NULL) return;
+
+    while (max) {
+        if ((ptr & TARGET_PAGE_MASK) != page) {
+            phys = (char *)v2p(ptr, 0);
+            page = ptr & TARGET_PAGE_MASK;
+        }
+        *buf = *phys;
+        if (*phys == '\0')
+            return;
+        ptr ++;
+        buf ++;
+        phys ++;
+        max --;
+    }
+}
+
 #endif /* !CONFIG_USER_ONLY */
 
 /* Complex FPU operations which may need stack space. */

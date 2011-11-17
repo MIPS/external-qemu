@@ -590,7 +590,7 @@ void cpu_mips_update_irq (CPUState *env);
 int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                                int mmu_idx, int is_softmmu);
 void do_interrupt (CPUState *env);
-void r4k_invalidate_tlb (CPUState *env, int idx, int use_extra);
+//void r4k_invalidate_tlb (CPUState *env, int idx, int use_extra);
 
 static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
 {
