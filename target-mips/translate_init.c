@@ -15,8 +15,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 
 /* CPU / CPU family specific config register values. */
@@ -71,6 +70,8 @@ struct mips_def_t {
     int32_t CP0_Config3;
     int32_t CP0_Config6;
     int32_t CP0_Config7;
+    target_ulong CP0_LLAddr_rw_bitmask;
+    int CP0_LLAddr_shift;
     int32_t SYNCI_Step;
     int32_t CCRes;
     int32_t CP0_Status_rw_bitmask;
@@ -106,6 +107,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1278FF17,
@@ -125,6 +128,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1258FF17,
@@ -142,6 +147,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1278FF17,
@@ -159,6 +166,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1258FF17,
@@ -177,6 +186,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1278FF17,
@@ -195,6 +206,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x1258FF17,
@@ -213,6 +226,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         /* No DSP implemented. */
@@ -232,6 +247,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt),
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         /* No DSP implemented. */
@@ -253,6 +270,8 @@ static const mips_def_t mips_defs[] =
                        (0 << CP0C1_DS) | (3 << CP0C1_DL) | (1 << CP0C1_DA),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (0 << CP0C3_VInt) | (1 << CP0C3_MT),
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 0,
         .SYNCI_Step = 32,
         .CCRes = 2,
         /* No DSP implemented. */
@@ -295,6 +314,8 @@ static const mips_def_t mips_defs[] =
         .CP0_Config0 = (1 << 17) | (0x1 << 9) | (0x1 << 6) | (0x2 << CP0C0_K0),
         /* Note: Config1 is only used internally, the R4000 has only Config0. */
         .CP0_Config1 = (1 << CP0C1_FP) | (47 << CP0C1_MMU),
+        .CP0_LLAddr_rw_bitmask = 0xFFFFFFFF,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 16,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x3678FFFF,
@@ -311,6 +332,8 @@ static const mips_def_t mips_defs[] =
         /* No L2 cache, icache size 8k, dcache size 8k, uncached coherency. */
         .CP0_Config0 = (1 << 17) | (0x1 << 9) | (0x1 << 6) | (0x2 << CP0C0_K0),
         .CP0_Config1 = (1 << CP0C1_FP) | (47 << CP0C1_MMU),
+        .CP0_LLAddr_rw_bitmask = 0xFFFFFFFFL,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 16,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x3678FFFF,
@@ -332,6 +355,8 @@ static const mips_def_t mips_defs[] =
                        (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x32F8FFFF,
@@ -351,6 +376,8 @@ static const mips_def_t mips_defs[] =
                        (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 4,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x36F8FFFF,
@@ -375,6 +402,8 @@ static const mips_def_t mips_defs[] =
                        (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3,
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 0,
         .SYNCI_Step = 32,
         .CCRes = 1,
         .CP0_Status_rw_bitmask = 0x36FBFFFF,
@@ -400,6 +429,8 @@ static const mips_def_t mips_defs[] =
                        (1 << CP0C1_PC) | (1 << CP0C1_WR) | (1 << CP0C1_EP),
         .CP0_Config2 = MIPS_CONFIG2,
         .CP0_Config3 = MIPS_CONFIG3 | (1 << CP0C3_LPA),
+        .CP0_LLAddr_rw_bitmask = 0,
+        .CP0_LLAddr_shift = 0,
         .SYNCI_Step = 32,
         .CCRes = 2,
         .CP0_Status_rw_bitmask = 0x36FBFFFF,
@@ -482,8 +513,6 @@ static void mmu_init (CPUMIPSState *env, const mips_def_t *def)
         default:
             cpu_abort(env, "MMU type not supported\n");
     }
-    env->CP0_Random = env->tlb->nb_tlb - 1;
-    env->tlb->tlb_in_use = env->tlb->nb_tlb;
 }
 #endif /* CONFIG_USER_ONLY */
 
@@ -495,14 +524,6 @@ static void fpu_init (CPUMIPSState *env, const mips_def_t *def)
         env->fpus[i].fcr0 = def->CP1_fcr0;
 
     memcpy(&env->active_fpu, &env->fpus[0], sizeof(env->active_fpu));
-#if defined(CONFIG_USER_ONLY)
-    if (env->CP0_Config1 & (1 << CP0C1_FP))
-        env->hflags |= MIPS_HFLAG_FPU;
-#ifdef TARGET_MIPS64
-    if (env->active_fpu.fcr0 & (1 << FCR0_F64))
-        env->hflags |= MIPS_HFLAG_F64;
-#endif
-#endif
 }
 
 static void mvp_init (CPUMIPSState *env, const mips_def_t *def)
@@ -530,52 +551,4 @@ static void mvp_init (CPUMIPSState *env, const mips_def_t *def)
     env->mvp->CP0_MVPConf1 = (1 << CP0MVPC1_CIM) | (1 << CP0MVPC1_CIF) |
                              (0x0 << CP0MVPC1_PCX) | (0x0 << CP0MVPC1_PCP2) |
                              (0x1 << CP0MVPC1_PCP1);
-}
-
-static int cpu_mips_register (CPUMIPSState *env, const mips_def_t *def)
-{
-    env->CP0_PRid = def->CP0_PRid;
-    env->CP0_Config0 = def->CP0_Config0;
-#ifdef TARGET_WORDS_BIGENDIAN
-    env->CP0_Config0 |= (1 << CP0C0_BE);
-#endif
-    env->CP0_Config1 = def->CP0_Config1;
-    env->CP0_Config2 = def->CP0_Config2;
-    env->CP0_Config3 = def->CP0_Config3;
-    env->CP0_Config6 = def->CP0_Config6;
-    env->CP0_Config7 = def->CP0_Config7;
-    env->SYNCI_Step = def->SYNCI_Step;
-    env->CCRes = def->CCRes;
-    env->CP0_Status_rw_bitmask = def->CP0_Status_rw_bitmask;
-    env->CP0_TCStatus_rw_bitmask = def->CP0_TCStatus_rw_bitmask;
-    env->CP0_SRSCtl = def->CP0_SRSCtl;
-    env->current_tc = 0;
-    env->SEGBITS = def->SEGBITS;
-    env->SEGMask = (target_ulong)((1ULL << def->SEGBITS) - 1);
-#if defined(TARGET_MIPS64)
-    if (def->insn_flags & ISA_MIPS3) {
-        env->hflags |= MIPS_HFLAG_64;
-        env->SEGMask |= 3ULL << 62;
-    }
-#endif
-    env->PABITS = def->PABITS;
-    env->PAMask = (target_ulong)((1ULL << def->PABITS) - 1);
-    env->CP0_SRSConf0_rw_bitmask = def->CP0_SRSConf0_rw_bitmask;
-    env->CP0_SRSConf0 = def->CP0_SRSConf0;
-    env->CP0_SRSConf1_rw_bitmask = def->CP0_SRSConf1_rw_bitmask;
-    env->CP0_SRSConf1 = def->CP0_SRSConf1;
-    env->CP0_SRSConf2_rw_bitmask = def->CP0_SRSConf2_rw_bitmask;
-    env->CP0_SRSConf2 = def->CP0_SRSConf2;
-    env->CP0_SRSConf3_rw_bitmask = def->CP0_SRSConf3_rw_bitmask;
-    env->CP0_SRSConf3 = def->CP0_SRSConf3;
-    env->CP0_SRSConf4_rw_bitmask = def->CP0_SRSConf4_rw_bitmask;
-    env->CP0_SRSConf4 = def->CP0_SRSConf4;
-    env->insn_flags = def->insn_flags;
-
-#ifndef CONFIG_USER_ONLY
-    mmu_init(env, def);
-#endif
-    fpu_init(env, def);
-    mvp_init(env, def);
-    return 0;
 }

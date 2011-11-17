@@ -4,17 +4,18 @@
 
 #define TIMER_FREQ	100 * 1000 * 1000
 
-void cpu_mips_irqctrl_init (void)
-{
-}
-
 /* XXX: do not use a global */
 uint32_t cpu_mips_get_random (CPUState *env)
 {
-    static uint32_t seed = 0;
+    static uint32_t lfsr = 1;
+    static uint32_t prev_idx = 0;
     uint32_t idx;
-    seed = seed * 314159 + 1;
-    idx = (seed >> 16) % (env->tlb->nb_tlb - env->CP0_Wired) + env->CP0_Wired;
+    /* Don't return same value twice, so get another value */
+    do {
+        lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xd0000001u);
+        idx = lfsr % (env->tlb->nb_tlb - env->CP0_Wired) + env->CP0_Wired;
+    } while (idx == prev_idx);
+    prev_idx = idx;
     return idx;
 }
 
@@ -26,7 +27,7 @@ uint32_t cpu_mips_get_count (CPUState *env)
     else
         return env->CP0_Count +
             (uint32_t)muldiv64(qemu_get_clock(vm_clock),
-                               TIMER_FREQ, ticks_per_sec);
+                               TIMER_FREQ, get_ticks_per_sec());
 }
 
 static void cpu_mips_timer_update(CPUState *env)
@@ -36,8 +37,8 @@ static void cpu_mips_timer_update(CPUState *env)
 
     now = qemu_get_clock(vm_clock);
     wait = env->CP0_Compare - env->CP0_Count -
-	    (uint32_t)muldiv64(now, TIMER_FREQ, ticks_per_sec);
-    next = now + muldiv64(wait, ticks_per_sec, TIMER_FREQ);
+	    (uint32_t)muldiv64(now, TIMER_FREQ, get_ticks_per_sec());
+    next = now + muldiv64(wait, get_ticks_per_sec(), TIMER_FREQ);
     qemu_mod_timer(env->timer, next);
 }
 
@@ -49,7 +50,7 @@ void cpu_mips_store_count (CPUState *env, uint32_t count)
         /* Store new count register */
         env->CP0_Count =
             count - (uint32_t)muldiv64(qemu_get_clock(vm_clock),
-                                       TIMER_FREQ, ticks_per_sec);
+                                       TIMER_FREQ, get_ticks_per_sec());
         /* Update timer timer */
         cpu_mips_timer_update(env);
     }
@@ -74,7 +75,7 @@ void cpu_mips_stop_count(CPUState *env)
 {
     /* Store the current value */
     env->CP0_Count += (uint32_t)muldiv64(qemu_get_clock(vm_clock),
-                                         TIMER_FREQ, ticks_per_sec);
+                                         TIMER_FREQ, get_ticks_per_sec());
 }
 
 static void mips_timer_cb (void *opaque)
@@ -83,9 +84,7 @@ static void mips_timer_cb (void *opaque)
 
     env = opaque;
 #if 0
-    if (logfile) {
-        fprintf(logfile, "%s\n", __func__);
-    }
+    qemu_log("%s\n", __func__);
 #endif
 
     if (env->CP0_Cause & (1 << CP0Ca_DC))

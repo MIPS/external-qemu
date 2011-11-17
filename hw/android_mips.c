@@ -18,6 +18,14 @@
 #include "goldfish_device.h"
 #include "android/globals.h"
 #include "audio/audio.h"
+#include "blockdev.h"
+#ifdef CONFIG_MEMCHECK
+#include "memcheck/memcheck_api.h"
+#endif  // CONFIG_MEMCHECK
+
+#include "android/utils/debug.h"
+
+#define  D(...)  VERBOSE_PRINT(init,__VA_ARGS__)
 
 #define MIPS_CPU_SAVE_VERSION  1
 
@@ -35,12 +43,6 @@ static struct goldfish_device event0_device = {
 static struct goldfish_device nand_device = {
     .name = "goldfish_nand",
     .id = 0,
-    .size = 0x1000
-};
-
-static struct goldfish_device trace_device = {
-    .name = "qemu_trace",
-    .id = -1,
     .size = 0x1000
 };
 
@@ -147,7 +149,6 @@ static void android_mips_init_(ram_addr_t ram_size,
     qemu_irq *goldfish_pic;
     int i;
     ram_addr_t ram_offset;
-    DisplayState*  ds = get_displaystate();
 
     if (!cpu_model)
         cpu_model = "24Kf";
@@ -162,7 +163,6 @@ static void android_mips_init_(ram_addr_t ram_size,
     /* Init internal devices */
     cpu_mips_irq_init_cpu(env);
     cpu_mips_clock_init(env);
-    cpu_mips_irqctrl_init();
 
 #define GOLDFISH_INTERRUPT	0x1f000000
 #define GOLDFISH_DEVICEBUS	0x1f001000
@@ -207,16 +207,16 @@ static void android_mips_init_(ram_addr_t ram_size,
         }
     }
 
-    goldfish_fb_init(ds, 0);
+    goldfish_fb_init(0);
 #ifdef HAS_AUDIO
     goldfish_audio_init(GOLDFISH_AUDIO, 0, audio_input_source);
 #endif
     {
-        int  idx = drive_get_index( IF_IDE, 0, 0 );
-        if (idx >= 0)
-            goldfish_mmc_init(GOLDFISH_MMC, 0, drives_table[idx].bdrv);
+        DriveInfo* info = drive_get( IF_IDE, 0, 0 );
+        if (info != NULL) {
+            goldfish_mmc_init(GOLDFISH_MMC, 0, info->bdrv);
+	}
     }
-
     goldfish_memlog_init(GOLDFISH_MEMLOG);
 
     if (android_hw->hw_battery)
@@ -231,9 +231,18 @@ static void android_mips_init_(ram_addr_t ram_size,
 #endif
 #ifdef CONFIG_TRACE
     extern const char *trace_filename;
-    if(trace_filename != NULL) {
-        goldfish_add_device_no_io(&trace_device);
-        trace_dev_init(trace_device.base);
+    /* Init trace device if either tracing, or memory checking is enabled. */
+    if (trace_filename != NULL
+#ifdef CONFIG_MEMCHECK
+        || memcheck_enabled
+#endif  // CONFIG_MEMCHECK
+       ) {
+        trace_dev_init();
+    }
+    if (trace_filename != NULL) {
+        D( "Trace file name is set to %s\n", trace_filename );
+    } else  {
+        D("Trace file name is not set\n");
     }
 #endif
 
