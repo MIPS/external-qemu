@@ -246,6 +246,8 @@ static void android_mips_init_(ram_addr_t ram_size,
     }
 #endif
 
+    pipe_dev_init();
+
 #if TEST_SWITCH
     {
         void *sw;
