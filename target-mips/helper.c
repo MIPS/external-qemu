@@ -14,8 +14,7 @@
  * Lesser General Public License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA  02110-1301 USA
+ * License along with this library; if not, see <http://www.gnu.org/licenses/>.
  */
 #include <stdarg.h>
 #include <stdlib.h>
@@ -36,7 +35,7 @@ enum {
 };
 
 /* no MMU emulation */
-int no_mmu_map_address (CPUState *env, target_ulong *physical, int *prot,
+int no_mmu_map_address (CPUState *env, target_phys_addr_t *physical, int *prot,
                         target_ulong address, int rw, int access_type)
 {
     *physical = address;
@@ -45,7 +44,7 @@ int no_mmu_map_address (CPUState *env, target_ulong *physical, int *prot,
 }
 
 /* fixed mapping MMU emulation */
-int fixed_mmu_map_address (CPUState *env, target_ulong *physical, int *prot,
+int fixed_mmu_map_address (CPUState *env, target_phys_addr_t *physical, int *prot,
                            target_ulong address, int rw, int access_type)
 {
     if (address <= (int32_t)0x7FFFFFFFUL) {
@@ -62,34 +61,19 @@ int fixed_mmu_map_address (CPUState *env, target_ulong *physical, int *prot,
     return TLBRET_MATCH;
 }
 
-/* Hash table index(18 bits):
- *   BIT [0:7]: ASID
- *   BIT [8:16]: BIT [13:21] of VA
- *   BIT [17]: BIT 30 of VA
- */
-unsigned long valid_bitsmap[0x2000];
-/*TLB hash table*/
-r4k_tlb_t tlb_cache[0x40000];
-
 /* MIPS32/MIPS64 R4000-style MMU emulation */
-int r4k_map_address (CPUState *env, target_ulong *physical, int *prot,
+int r4k_map_address (CPUState *env, target_phys_addr_t *physical, int *prot,
                      target_ulong address, int rw, int access_type)
 {
     uint8_t ASID = env->CP0_EntryHi & 0xFF;
-    r4k_tlb_t *tlb;
-    target_ulong mask;
-    target_ulong tag;
-    target_ulong VPN;
-    int n;
     int i;
 
-    for (i = 0; i < env->tlb->nb_tlb; i++) {
-        tlb = &env->tlb->mmu.r4k.tlb[i];
+    for (i = 0; i < env->tlb->tlb_in_use; i++) {
+        r4k_tlb_t *tlb = &env->tlb->mmu.r4k.tlb[i];
         /* 1k pages are not supported. */
-        mask = ~(TARGET_PAGE_MASK << 1);
-        tag = address & ~mask;
-        VPN = tlb->VPN & ~mask;
-
+        target_ulong mask = tlb->PageMask | ~(TARGET_PAGE_MASK << 1);
+        target_ulong tag = address & ~mask;
+        target_ulong VPN = tlb->VPN & ~mask;
 #if defined(TARGET_MIPS64)
         tag &= env->SEGMask;
 #endif
@@ -97,42 +81,7 @@ int r4k_map_address (CPUState *env, target_ulong *physical, int *prot,
         /* Check ASID, virtual page number & size */
         if ((tlb->G == 1 || tlb->ASID == ASID) && VPN == tag) {
             /* TLB match */
-            n = !!(address & mask & ~(mask >> 1));
-            /* Check access rights */
-            if (!(n ? tlb->V1 : tlb->V0))
-                return TLBRET_INVALID;
-            if (rw == 0 || (n ? tlb->D1 : tlb->D0)) {
-                *physical = tlb->PFN[n] | (address & (mask >> 1));
-                *prot = PAGE_READ;
-                if (n ? tlb->D1 : tlb->D0)
-                    *prot |= PAGE_WRITE;
-
-                return TLBRET_MATCH;
-            }
-            return TLBRET_DIRTY;
-        }
-    }
-
-    /*Search the TLB hash table*/
-    int index = ((address>>5)&0x1ff00)| ASID;
-    index |= (address>>13)&0x20000;
-
-    if (test_bit(index&0x1f,&valid_bitsmap[index>>5]))
-    {
-        tlb = &tlb_cache[index];
-        /* 1k pages are not supported. */
-        mask = tlb->PageMask | ~(TARGET_PAGE_MASK << 1);
-        tag = address & ~mask;
-        VPN = tlb->VPN & ~mask;
-
-#if defined(TARGET_MIPS64)
-        tag &= env->SEGMask;
-#endif
-        /*Check virtual page number & size */
-        if (likely(VPN == tag)) {
-            //hash_hit ++;
-            /* TLB match */
-            n = !!(address & mask & ~(mask >> 1));
+            int n = !!(address & mask & ~(mask >> 1));
             /* Check access rights */
             if (!(n ? tlb->V1 : tlb->V0))
                 return TLBRET_INVALID;
@@ -150,7 +99,7 @@ int r4k_map_address (CPUState *env, target_ulong *physical, int *prot,
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static int get_physical_address (CPUState *env, target_ulong *physical,
+static int get_physical_address (CPUState *env, target_phys_addr_t *physical,
                                 int *prot, target_ulong address,
                                 int rw, int access_type)
 {
@@ -171,7 +120,7 @@ static int get_physical_address (CPUState *env, target_ulong *physical,
 
     if (address <= (int32_t)0x7FFFFFFFUL) {
         /* useg */
-        if (unlikely(env->CP0_Status & (1 << CP0St_ERL))) {
+        if (env->CP0_Status & (1 << CP0St_ERL)) {
             *physical = address & 0xFFFFFFFF;
             *prot = PAGE_READ | PAGE_WRITE;
         } else {
@@ -246,19 +195,70 @@ static int get_physical_address (CPUState *env, target_ulong *physical,
 #if 0
     qemu_log(TARGET_FMT_lx " %d %d => " TARGET_FMT_lx " %d (%d)\n",
             address, rw, access_type, *physical, *prot, ret);
-    }
 #endif
 
     return ret;
 }
 #endif
 
+static void raise_mmu_exception(CPUState *env, target_ulong address,
+                                int rw, int tlb_error)
+{
+    int exception = 0, error_code = 0;
+
+    switch (tlb_error) {
+    default:
+    case TLBRET_BADADDR:
+        /* Reference to kernel address from user mode or supervisor mode */
+        /* Reference to supervisor address from user mode */
+        if (rw)
+            exception = EXCP_AdES;
+        else
+            exception = EXCP_AdEL;
+        break;
+    case TLBRET_NOMATCH:
+        /* No TLB match for a mapped address */
+        if (rw)
+            exception = EXCP_TLBS;
+        else
+            exception = EXCP_TLBL;
+        error_code = 1;
+        break;
+    case TLBRET_INVALID:
+        /* TLB match with no valid bit */
+        if (rw)
+            exception = EXCP_TLBS;
+        else
+            exception = EXCP_TLBL;
+        break;
+    case TLBRET_DIRTY:
+        /* TLB match but 'D' bit is cleared */
+        exception = EXCP_LTLBL;
+        break;
+
+    }
+    /* Raise exception */
+    env->CP0_BadVAddr = address;
+    env->CP0_Context = (env->CP0_Context & ~0x007fffff) |
+                       ((address >> 9) & 0x007ffff0);
+    env->CP0_EntryHi =
+        (env->CP0_EntryHi & 0xFF) | (address & (TARGET_PAGE_MASK << 1));
+#if defined(TARGET_MIPS64)
+    env->CP0_EntryHi &= env->SEGMask;
+    env->CP0_XContext = (env->CP0_XContext & ((~0ULL) << (env->SEGBITS - 7))) |
+                        ((address & 0xC00000000000ULL) >> (55 - env->SEGBITS)) |
+                        ((address & ((1ULL << env->SEGBITS) - 1) & 0xFFFFFFFFFFFFE000ULL) >> 9);
+#endif
+    env->exception_index = exception;
+    env->error_code = error_code;
+}
+
 target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
 {
 #if defined(CONFIG_USER_ONLY)
     return addr;
 #else
-    target_ulong phys_addr;
+    target_phys_addr_t phys_addr;
     int prot;
 
     if (get_physical_address(env, &phys_addr, &prot, addr, 0, ACCESS_INT) != 0)
@@ -267,145 +267,13 @@ target_phys_addr_t cpu_get_phys_page_debug(CPUState *env, target_ulong addr)
 #endif
 }
 
-void cpu_mips_init_mmu (CPUState *env)
-{
-}
-
-target_ulong pgd_current_p = 0;
-/* 
- * Get the pgd_current from TLB exception handler
- * The exception handler is generated by function build_r4000_tlb_refill_handler.
- * 0x80000000:0x3c1b8033: lui k1,0x8033
- * 0x80000004:0x401a4000: mfc0 k0,c0_badvaddr
- * 0x80000008:0x8f7bb000: lw  k1,-20480(k1)
- *
- */
-static inline target_ulong cpu_mips_get_pgd(CPUState *env)
-{
-    uint32_t ins1,ins2;
-    uint32_t ebase = env->CP0_EBase - 0x80000000;
-    target_ulong pgd_current;
-
-    if (unlikely(!pgd_current_p))
-    {
-        /*get the PGD current from TLB refill exception handler*/
-        ins1 = ldl_phys(ebase);    /*0x80000000*/
-        ins2 = ldl_phys(ebase + 8);/*0x80000008*/
-        pgd_current_p = ((ins1 & 0xffff)<<16);
-        pgd_current_p += (((int32_t)(ins2 & 0xffff))<<16)>>16;
-    }
-
-    if (likely((pgd_current_p > 0x80000000) && (pgd_current_p<0xa0000000)))
-    {
-        /*get the pgd_current*/
-        return ldl_phys(pgd_current_p - 0x80000000);
-    }
-    
-    /*the tlb handler is not the one we expected......*/
-    return 0;
-}
-
-static inline int cpu_mips_tlb_refill(CPUState *env, target_ulong address, int rw ,
-                                      int mmu_idx, int is_softmmu)
-{
-    int32_t saved_hflags;
-    target_ulong saved_badvaddr,saved_entryhi,saved_context;
-
-    target_ulong pgd_addr,pt_addr,index;
-    target_ulong fault_addr,ptw_phys;
-    target_ulong elo_even,elo_odd;
-    uint32_t page_valid;
-    int ret;
-
-    saved_badvaddr = env->CP0_BadVAddr;
-    saved_context = env->CP0_Context;
-    saved_entryhi = env->CP0_EntryHi;
-    saved_hflags = env->hflags;
-
-    env->CP0_BadVAddr = address;
-    env->CP0_Context = (env->CP0_Context & ~0x007fffff) |
-                    ((address >> 9) &   0x007ffff0);
-    env->CP0_EntryHi =
-        (env->CP0_EntryHi & 0xFF) | (address & (TARGET_PAGE_MASK << 1));
-
-    env->hflags = MIPS_HFLAG_KM;
-
-    fault_addr = env->CP0_BadVAddr;
-    page_valid = 0;
-
-    pgd_addr = cpu_mips_get_pgd(env);
-    if (unlikely(!pgd_addr))
-    {
-        /*not valid pgd_addr,just return.*/
-        //return TLBRET_NOMATCH;
-        ret = TLBRET_NOMATCH;
-        goto out;
-    }
-
-    ptw_phys = pgd_addr - (int32_t)0x80000000UL;
-    index = (fault_addr>>22)<<2;
-    ptw_phys += index;
-
-    pt_addr = ldl_phys(ptw_phys);
-
-    ptw_phys = pt_addr - (int32_t)0x80000000UL;
-    index = (env->CP0_Context>>1)&0xff8;
-    ptw_phys += index;
-
-    /*get the page table entry*/
-    elo_even = ldl_phys(ptw_phys);
-    elo_odd  = ldl_phys(ptw_phys+4);
-    elo_even = elo_even >> 6;
-    elo_odd = elo_odd >> 6;
-    env->CP0_EntryLo0 = elo_even;
-    env->CP0_EntryLo1 = elo_odd;
-    /*Done. refill the TLB */
-    r4k_helper_ptw_tlbrefill(env);
-
-    /* Since we know the value of TLB entry, we can
-     * return the TLB lookup value here.
-     */
-
-    env->hflags = saved_hflags;
-
-    target_ulong mask = env->CP0_PageMask | ~(TARGET_PAGE_MASK << 1);
-    int n = !!(address & mask & ~(mask >> 1));
-    /* Check access rights */
-    if (!(n ? (elo_odd & 2) != 0 : (elo_even & 2) != 0))
-    {
-        ret = TLBRET_INVALID;
-        goto out;
-    }
-
-    if (rw == 0 || (n ? (elo_odd & 4) != 0 : (elo_even & 4) != 0)) {
-        target_ulong physical = (n?(elo_odd >> 6) << 12 : (elo_even >> 6) << 12);
-        physical |= (address & (mask >> 1));
-        int prot = PAGE_READ;
-        if (n ? (elo_odd & 4) != 0 : (elo_even & 4) != 0)
-            prot |= PAGE_WRITE;
-
-        tlb_set_page(env, address & TARGET_PAGE_MASK,
-                        physical & TARGET_PAGE_MASK, prot,
-                        mmu_idx, is_softmmu);
-        ret = TLBRET_MATCH;
-        goto out;
-    }
-    ret = TLBRET_DIRTY;
-
-out:
-    env->CP0_BadVAddr = saved_badvaddr;
-    env->CP0_Context = saved_context;
-    env->CP0_EntryHi = saved_entryhi;
-    env->hflags = saved_hflags;
-    return ret;
-}
-
 int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                                int mmu_idx, int is_softmmu)
 {
-    target_ulong physical;
+#if !defined(CONFIG_USER_ONLY)
+    target_phys_addr_t physical;
     int prot;
-    int exception = 0, error_code = 0;
+#endif
     int access_type;
     int ret = 0;
 
@@ -426,7 +294,7 @@ int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
 #else
     ret = get_physical_address(env, &physical, &prot,
                                address, rw, access_type);
-    qemu_log("%s address=" TARGET_FMT_lx " ret %d physical " TARGET_FMT_lx " prot %d\n",
+    qemu_log("%s address=" TARGET_FMT_lx " ret %d physical " TARGET_FMT_plx " prot %d\n",
               __func__, address, ret, physical, prot);
     if (ret == TLBRET_MATCH) {
        ret = tlb_set_page(env, address & TARGET_PAGE_MASK,
@@ -435,68 +303,35 @@ int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
     } else if (ret < 0)
 #endif
     {
-        /*ret<0 means: 
-     *   (1) TLBRET_NOMATCH: There is no tlb matched entry.
-     *   (2) TLBRET_INVALID: TLB matched but v bit is not set.
-     *   (3) TLBRET_DIRTY: TLB matcded. Write operation but D bit is not set.
-     */
-        if (ret == TLBRET_NOMATCH)
-        {
-            /*do tlb refill first. next time, ret will NOT be TLB_NOMATCH.*/
-            ret = cpu_mips_tlb_refill(env,address,rw,mmu_idx,is_softmmu);
-        }
-        if (ret <0)
-        {
-            do_fault:
-                switch (ret) {
-                default:
-                case TLBRET_BADADDR:
-                    /* Reference to kernel address from user mode or supervisor mode */
-                    /* Reference to supervisor address from user mode */
-                    if (rw)
-                        exception = EXCP_AdES;
-                    else
-                        exception = EXCP_AdEL;
-                    break;
-                case TLBRET_NOMATCH:
-                    /* No TLB match for a mapped address */
-                    if (rw)
-                        exception = EXCP_TLBS;
-                    else
-                        exception = EXCP_TLBL;
-                    error_code = 1;
-                    break;
-                case TLBRET_INVALID:
-                    /* TLB match with no valid bit */
-                    if (rw)
-                        exception = EXCP_TLBS;
-                    else
-                        exception = EXCP_TLBL;
-                    break;
-                case TLBRET_DIRTY:
-                    /* TLB match but 'D' bit is cleared */
-                    exception = EXCP_LTLBL;
-                    break;
-                }
-                /* Raise exception */
-                env->CP0_BadVAddr = address;
-                env->CP0_Context = (env->CP0_Context & ~0x007fffff) |
-                                ((address >> 9) &   0x007ffff0);
-                env->CP0_EntryHi =
-                    (env->CP0_EntryHi & 0xFF) | (address & (TARGET_PAGE_MASK << 1));
-        #if defined(TARGET_MIPS64)
-                env->CP0_EntryHi &= env->SEGMask;
-                env->CP0_XContext = (env->CP0_XContext & ((~0ULL) << (env->SEGBITS - 7))) |
-                                    ((address & 0xC00000000000ULL) >> (env->SEGBITS - 9)) |
-                                    ((address & ((1ULL << env->SEGBITS) - 1) & 0xFFFFFFFFFFFFE000ULL) >> 9);
-        #endif
-                env->exception_index = exception;
-                env->error_code = error_code;
-                ret = 1;
-            }
+        raise_mmu_exception(env, address, rw, ret);
+        ret = 1;
     }
+
     return ret;
 }
+
+#if !defined(CONFIG_USER_ONLY)
+target_phys_addr_t cpu_mips_translate_address(CPUState *env, target_ulong address, int rw)
+{
+    target_phys_addr_t physical;
+    int prot;
+    int access_type;
+    int ret = 0;
+
+    rw &= 1;
+
+    /* data access */
+    access_type = ACCESS_INT;
+    ret = get_physical_address(env, &physical, &prot,
+                               address, rw, access_type);
+    if (ret != TLBRET_MATCH) {
+        raise_mmu_exception(env, address, rw, ret);
+        return -1LL;
+    } else {
+        return physical;
+    }
+}
+#endif
 
 static const char * const excp_names[EXCP_LAST + 1] = {
     [EXCP_RESET] = "reset",
