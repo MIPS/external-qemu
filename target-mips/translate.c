@@ -2132,7 +2132,7 @@ static void gen_muldiv (DisasContext *ctx, uint32_t opc,
             tcg_gen_trunc_i64_tl(t1, t2);
             tcg_temp_free_i64(t2);
             tcg_gen_ext32s_tl(cpu_LO[0], t0);
-            tcg_gen_ext32s_tl(cpu_LO[1], t1);
+            tcg_gen_ext32s_tl(cpu_HI[0], t1);
         }
         opn = "madd";
         break;
