@@ -14,7 +14,7 @@
 
 // uint_fast8_t and uint_fast16_t not in <sys/int_types.h>
 // XXX: move that elsewhere
-#if defined(HOST_SOLARIS) && HOST_SOLARIS < 10
+#if defined(CONFIG_SOLARIS) && CONFIG_SOLARIS_VERSION < 10
 typedef unsigned char           uint_fast8_t;
 typedef unsigned int            uint_fast16_t;
 #endif
@@ -40,7 +40,7 @@ typedef struct CPUMIPSTLBContext CPUMIPSTLBContext;
 struct CPUMIPSTLBContext {
     uint32_t nb_tlb;
     uint32_t tlb_in_use;
-    int (*map_address) (struct CPUMIPSState *env, target_ulong *physical, int *prot, target_ulong address, int rw, int access_type);
+    int (*map_address) (struct CPUMIPSState *env, target_phys_addr_t *physical, int *prot, target_ulong address, int rw, int access_type);
     void (*helper_tlbwi) (void);
     void (*helper_tlbwr) (void);
     void (*helper_tlbp) (void);
@@ -62,7 +62,7 @@ union fpr_t {
 /* define FP_ENDIAN_IDX to access the same location
  * in the fpr_t union regardless of the host endianess
  */
-#if defined(WORDS_BIGENDIAN)
+#if defined(HOST_WORDS_BIGENDIAN)
 #  define FP_ENDIAN_IDX 1
 #else
 #  define FP_ENDIAN_IDX 0
@@ -175,8 +175,6 @@ struct CPUMIPSState {
     TCState active_tc;
     CPUMIPSFPUContext active_fpu;
 
-    CPUMIPSMVPContext *mvp;
-    CPUMIPSTLBContext *tlb;
     uint32_t current_tc;
     uint32_t current_fpu;
 
@@ -374,7 +372,12 @@ struct CPUMIPSState {
     int32_t CP0_Config6;
     int32_t CP0_Config7;
     /* XXX: Maybe make LLAddr per-TC? */
-    target_ulong CP0_LLAddr;
+    target_ulong lladdr;
+    target_ulong llval;
+    target_ulong llnewval;
+    target_ulong llreg;
+    target_ulong CP0_LLAddr_rw_bitmask;
+    int CP0_LLAddr_shift;
     target_ulong CP0_WatchLo[8];
     int32_t CP0_WatchHi[8];
     target_ulong CP0_XContext;
@@ -455,16 +458,19 @@ struct CPUMIPSState {
 
     CPU_COMMON
 
+    CPUMIPSMVPContext *mvp;
+    CPUMIPSTLBContext *tlb;
+
     const mips_def_t *cpu_model;
     void *irq[8];
     struct QEMUTimer *timer; /* Internal timer */
 };
 
-int no_mmu_map_address (CPUMIPSState *env, target_ulong *physical, int *prot,
+int no_mmu_map_address (CPUMIPSState *env, target_phys_addr_t *physical, int *prot,
                         target_ulong address, int rw, int access_type);
-int fixed_mmu_map_address (CPUMIPSState *env, target_ulong *physical, int *prot,
+int fixed_mmu_map_address (CPUMIPSState *env, target_phys_addr_t *physical, int *prot,
                            target_ulong address, int rw, int access_type);
-int r4k_map_address (CPUMIPSState *env, target_ulong *physical, int *prot,
+int r4k_map_address (CPUMIPSState *env, target_phys_addr_t *physical, int *prot,
                      target_ulong address, int rw, int access_type);
 void r4k_helper_tlbwi (void);
 void r4k_helper_tlbwr (void);
@@ -569,6 +575,8 @@ enum {
 
     EXCP_LAST = EXCP_CACHE,
 };
+/* Dummy exception for conditional stores.  */
+#define EXCP_SC 0x100
 
 int cpu_mips_exec(CPUMIPSState *s);
 CPUMIPSState *cpu_mips_init(const char *cpu_model);
@@ -589,8 +597,11 @@ void cpu_mips_update_irq (CPUState *env);
 /* helper.c */
 int cpu_mips_handle_mmu_fault (CPUState *env, target_ulong address, int rw,
                                int mmu_idx, int is_softmmu);
+#define cpu_handle_mmu_fault cpu_mips_handle_mmu_fault
 void do_interrupt (CPUState *env);
-//void r4k_invalidate_tlb (CPUState *env, int idx, int use_extra);
+void r4k_invalidate_tlb (CPUState *env, int idx, int use_extra);
+target_phys_addr_t cpu_mips_translate_address (CPUState *env, target_ulong address,
+		                               int rw);
 
 static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
 {
@@ -605,6 +616,11 @@ static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
     *pc = env->active_tc.PC;
     *cs_base = 0;
     *flags = env->hflags & (MIPS_HFLAG_TMASK | MIPS_HFLAG_BMASK);
+}
+
+static inline void cpu_set_tls(CPUState *env, target_ulong newtls)
+{
+    env->tls_value = newtls;
 }
 
 #endif /* !defined (__MIPS_CPU_H__) */
