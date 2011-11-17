@@ -7698,6 +7698,14 @@ static void decode_opc (CPUState *env, DisasContext *ctx)
             break;
         case OPC_BREAK:
             generate_exception(ctx, EXCP_BREAK);
+	    /*
+	     * Check for the break code used by the FPU emulator
+	     * This is usually generated on the stack and its unlikely there
+	     * is any useful code beyond it
+	     */
+	    if (((ctx->opcode >> 16) & 0x3ff) == 0x202) {
+	      ctx->bstate = BS_STOP;
+	    }
             break;
         case OPC_SPIM:
 #ifdef MIPS_STRICT_STANDARD
