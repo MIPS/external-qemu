@@ -62,7 +62,7 @@ static void do_restore_state (void *pc_ptr)
     
     tb = tb_find_pc (pc);
     if (tb) {
-        cpu_restore_state (tb, env, pc, NULL);
+        cpu_restore_state (tb, env, pc);
     }
 }
 #endif
@@ -1839,7 +1839,7 @@ void tlb_fill (target_ulong addr, int is_write, int mmu_idx, void *retaddr)
             if (tb) {
                 /* the PC is inside the translated code. It means that we have
                    a virtual CPU fault */
-                cpu_restore_state(tb, env, pc, NULL);
+                cpu_restore_state(tb, env, pc);
             }
         }
         helper_raise_exception_err(env->exception_index, env->error_code);
@@ -2744,10 +2744,10 @@ static int float64_is_unordered(int sig, float64 a, float64 b STATUS_PARAM)
 {
     if (float64_is_signaling_nan(a) ||
         float64_is_signaling_nan(b) ||
-        (sig && (float64_is_nan(a) || float64_is_nan(b)))) {
+        (sig && (float64_is_any_nan(a) || float64_is_any_nan(b)))) {
         float_raise(float_flag_invalid, status);
         return 1;
-    } else if (float64_is_nan(a) || float64_is_nan(b)) {
+    } else if (float64_is_any_nan(a) || float64_is_any_nan(b)) {
         return 1;
     } else {
         return 0;
@@ -2802,10 +2802,10 @@ static flag float32_is_unordered(int sig, float32 a, float32 b STATUS_PARAM)
 {
     if (float32_is_signaling_nan(a) ||
         float32_is_signaling_nan(b) ||
-        (sig && (float32_is_nan(a) || float32_is_nan(b)))) {
+        (sig && (float32_is_any_nan(a) || float32_is_any_nan(b)))) {
         float_raise(float_flag_invalid, status);
         return 1;
-    } else if (float32_is_nan(a) || float32_is_nan(b)) {
+    } else if (float32_is_any_nan(a) || float32_is_any_nan(b)) {
         return 1;
     } else {
         return 0;
