@@ -8593,7 +8593,6 @@ CPUMIPSState *cpu_mips_init (const char *cpu_model)
 #ifndef CONFIG_USER_ONLY
     mmu_init(env, def);
 #endif
-    fpu_init(env, def);
     mvp_init(env, def);
     mips_tcg_init();
     cpu_reset(env);
@@ -8651,6 +8650,8 @@ void cpu_reset (CPUMIPSState *env)
     env->CP0_SRSConf4_rw_bitmask = env->cpu_model->CP0_SRSConf4_rw_bitmask;
     env->CP0_SRSConf4 = env->cpu_model->CP0_SRSConf4;
     env->insn_flags = env->cpu_model->insn_flags;
+
+    fpu_init(env, env->cpu_model);
 
 #if defined(CONFIG_USER_ONLY)
     env->hflags = MIPS_HFLAG_UM;
