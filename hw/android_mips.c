@@ -157,6 +157,10 @@ static void android_mips_init_(ram_addr_t ram_size,
 
     register_savevm( "cpu", 0, MIPS_CPU_SAVE_VERSION, cpu_save, cpu_load, env );
 
+#define GOLDFISH_IO_SPACE       0x1f000000
+
+    if (ram_size > GOLDFISH_IO_SPACE)
+        ram_size = GOLDFISH_IO_SPACE;   /* avoid overlap of ram and IO regs */
     ram_offset = qemu_ram_alloc(NULL, "android_mips", ram_size);
     cpu_register_physical_memory(0, ram_size, ram_offset | IO_MEM_RAM);
 

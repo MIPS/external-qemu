@@ -992,11 +992,6 @@ int main(int argc, char **argv)
             else
                 ramSize = 256;
         }
-#if defined(TARGET_MIPS)
-		/* MIPS cannot take more than 256MB for now */
-		if (ramSize > 256)
-			ramSize = 256;
-#endif
         hw->hw_ramSize = ramSize;
     }
 
