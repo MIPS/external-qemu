@@ -1504,10 +1504,7 @@ extern r4k_tlb_t tlb_cache[0x40000];
 static void inline r4k_invalidate_tlb_shadow (CPUState *env, int idx)
 {
     r4k_tlb_t *tlb;
-    target_ulong addr;
-    target_ulong end;
     uint8_t ASID = env->CP0_EntryHi & 0xFF;
-    target_ulong mask;
 
     tlb = &env->tlb->mmu.r4k.tlb[idx];
     /* The qemu TLB is flushed when the ASID changes, so no need to
@@ -1578,7 +1575,6 @@ void cpu_mips_tlb_flush (CPUState *env, int flush_global)
 {
     /* Flush qemu's TLB and discard all shadowed entries.  */
     tlb_flush (env, flush_global);
-    env->tlb->tlb_in_use = env->tlb->nb_tlb;
 }
 
 static void r4k_fill_tlb (int idx)
