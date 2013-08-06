@@ -160,7 +160,7 @@ static void android_mips_init_(ram_addr_t ram_size,
     ram_addr_t ram_offset;
 
     if (!cpu_model)
-        cpu_model = "24Kf";
+        cpu_model = "24KEf";
 
     env = cpu_init(cpu_model);
 
