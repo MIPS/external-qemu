@@ -214,6 +214,7 @@ endif  # EMULATOR_TARGET_ARCH == x86
 ifeq ($(EMULATOR_TARGET_ARCH), mips)
 common_LOCAL_SRC_FILES += \
     target-mips/op_helper.c \
+    target-mips/dsp_helper.c \
     target-mips/helper.c \
     target-mips/translate.c \
     target-mips/machine.c
